@@ -372,6 +372,9 @@ const FALLBACK_BARS = [
 //  H HH Zile (ex. "Lun,Mar,Mie" — gol dacă nu are happy hour)
 //  I HH De la (oră)  J HH Până la (oră)  K HH Ofertă (text)
 //  L Beri — "Nume:Preț:Volum | Nume2:Preț2:Volum2" ex. "Ursus:13:0.4l | Pilsner Urquell:23:0.5l"
+//     Aceeași bere în mai multe mărimi: pune preturile și volumele
+//     separate prin "/", perechi pe poziție — ex. "Ursus:10/25:0.4l/1l"
+//     apare ca 2 rânduri separate în meniu (0.4l-10 lei, 1l-25 lei).
 //  M Tags — separate prin virgulă, ex. "Terasă, Card acceptat"
 const SHEET_ID = "1k3hrKZOD0iNxNxTQ6D875JaoGockyeuN";
 // sheet=Baruri pins the read to that exact tab name, so tab order in the
@@ -390,10 +393,23 @@ function sheetCell(row, i){
 }
 function parseSheetBeers(raw){
   if(!raw) return [];
-  return raw.toString().split("|").map(s=>s.trim()).filter(Boolean).map(entry=>{
-    const [name, price, vol] = entry.split(":").map(s=>s ? s.trim() : s);
-    return [name || "Bere", Number(price) || 0, vol || ""];
+  const out = [];
+  raw.toString().split("|").map(s=>s.trim()).filter(Boolean).forEach(entry=>{
+    const [name, priceRaw, volRaw] = entry.split(":").map(s=>s ? s.trim() : s);
+    // Support multiple sizes for one beer via slashes on both sides, e.g.
+    // "Ursus:10/25:0.4l/1l" -> two line items, prices/volumes paired by
+    // position. A single value on one side (e.g. one price, two volumes)
+    // is reused for every size.
+    const prices = (priceRaw || "").split("/").map(s=>s.trim());
+    const vols = (volRaw || "").split("/").map(s=>s.trim());
+    const sizes = Math.max(prices.length, vols.length);
+    for(let i=0;i<sizes;i++){
+      const price = Number(prices[i] ?? prices[prices.length-1]) || 0;
+      const vol = vols[i] ?? vols[vols.length-1] ?? "";
+      out.push([name || "Bere", price, vol]);
+    }
   });
+  return out;
 }
 function parseSheetTags(raw){
   return raw ? raw.toString().split(",").map(s=>s.trim()).filter(Boolean) : [];
