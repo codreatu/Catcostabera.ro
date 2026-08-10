@@ -54,7 +54,8 @@
     background:var(--hop);color:var(--foam);font-size:9px;font-weight:700;
     padding:2px 5px;border-radius:99px;letter-spacing:.5px;border:1.5px solid var(--stout);
   }
-  .cap .lei{font-size:15px}
+  .cap .from{font-size:6px;font-weight:600;letter-spacing:.4px;text-transform:lowercase;opacity:.85;line-height:1}
+  .cap .lei{font-size:14px;line-height:1}
   .cap .cur{font-size:8px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;margin-top:1px}
   .cap:hover{transform:scale(1.12)}
   .capwrap{background:none;border:none}
@@ -173,6 +174,9 @@
   .menu h3{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;opacity:.6;margin-bottom:8px}
   .beer{display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;border-bottom:1px dashed var(--line);font-size:14.5px}
   .beer .bp{font-weight:700;color:var(--lager);font-size:15px}
+  .beer .bp.cheap{color:var(--cheap)}
+  .beer .bp.mid{color:var(--mid)}
+  .beer .bp.pricey{color:var(--pricey)}
   .beer .bv{opacity:.55;font-size:12px;margin-left:6px}
   .d-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
   .d-tags span{font-size:12px;background:var(--stout-2);border:1px solid var(--line);padding:4px 10px;border-radius:99px}
@@ -244,6 +248,7 @@ const CITIES = [
   {n:"Iași",        lat:47.1622, lng:27.5837},
   {n:"Brașov",      lat:45.6427, lng:25.5887},
   {n:"Constanța",   lat:44.1733, lng:28.6383},
+  {n:"Sighetu Marmației", lat:47.9196, lng:23.8776},
 ];
 
 // ---------------- Demo data (fictional venues, real neighbourhoods) ----------------
@@ -351,6 +356,12 @@ const BARS = [
   hours:[10,28], hh:null,
   beers:[["Bergenbier",9,"0.5l"],["Ursus",11,"0.5l"],["Corona",18,"0.33l"]],
   tags:["Pe nisip","Sezonier"]},
+
+ // Sighetu Marmației
+ {c:"Sighetu Marmației", n:"Hotel Grădina Morii", a:"Str. Mihai Eminescu 97, 435500 Sighetu Marmației", lat:47.9196, lng:23.8776,
+  hours:[8,23], hh:null,
+  beers:[["Ursus",13,"0.4l"],["Pilsner Urquell",23,"0.5l"]],
+  tags:["Hotel","Restaurant","Pin de test"]},
 ];
 
 const DAYS = ["Duminică","Luni","Marți","Miercuri","Joi","Vineri","Sâmbătă"];
@@ -444,7 +455,7 @@ function render(){
       const open = isOpen(b);
       const cls = "cap" + (open ? " "+priceClass(cheapest(b)) : " closed") + (hhLive(b)?" hh":"");
       const icon = L.divIcon({className:"capwrap", iconSize:[46,46], iconAnchor:[23,23],
-        html:`<div class="${cls}" role="button" aria-label="${b.n}, de la ${cheapest(b)} lei"><span class="lei">${cheapest(b)}</span><span class="cur">lei</span></div>`});
+        html:`<div class="${cls}" role="button" aria-label="${b.n}, de la ${cheapest(b)} lei"><span class="from">de la</span><span class="lei">${cheapest(b)}</span><span class="cur">lei</span></div>`});
       const m = L.marker([b.lat,b.lng],{icon}).addTo(map).on("click",()=>openDetail(b));
       markers.push(m);
     });
@@ -537,7 +548,7 @@ function openDetail(b){
     ${hasHHToday(b)?`<div class="hhbox">🍺 <b>Happy hour ${DAYS[dayNow].toLowerCase()}</b> ${b.hh.from}:00–${b.hh.to}:00 — ${b.hh.deal}${hhLive(b)?" · <b>chiar acum!</b>":""}</div>`:""}
     <div class="menu">
       <h3>Prețuri bere</h3>
-      ${b.beers.map(x=>`<div class="beer"><span>${x[0]}<span class="bv">${x[2]}</span></span><span class="bp">${x[1]} lei</span></div>`).join("")}
+      ${b.beers.map(x=>`<div class="beer"><span>${x[0]}<span class="bv">${x[2]}</span></span><span class="bp ${priceClass(x[1])}">${x[1]} lei</span></div>`).join("")}
     </div>
     <div class="d-tags">${b.tags.map(t=>`<span>${t}</span>`).join("")}</div>
     <div class="d-note">Prețuri actualizate de comunitate · MVP cu date demonstrative</div>`;
