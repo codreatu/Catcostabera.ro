@@ -177,6 +177,8 @@
   .beer .bp.cheap{color:var(--cheap)}
   .beer .bp.mid{color:var(--mid)}
   .beer .bp.pricey{color:var(--pricey)}
+  .beer .bp-group{display:inline-flex;flex-wrap:wrap;justify-content:flex-end;column-gap:4px}
+  .beer .bp-sep{opacity:.4;font-weight:400;font-size:13px;align-self:center}
   .beer .bv{opacity:.55;font-size:12px;margin-left:6px}
   .d-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
   .d-tags span{font-size:12px;background:var(--stout-2);border:1px solid var(--line);padding:4px 10px;border-radius:99px}
@@ -374,7 +376,8 @@ const FALLBACK_BARS = [
 //  L Beri — "Nume:Preț:Volum | Nume2:Preț2:Volum2" ex. "Ursus:13:0.4l | Pilsner Urquell:23:0.5l"
 //     Aceeași bere în mai multe mărimi: pune preturile și volumele
 //     separate prin "/", perechi pe poziție — ex. "Ursus:10/25:0.4l/1l"
-//     apare ca 2 rânduri separate în meniu (0.4l-10 lei, 1l-25 lei).
+//     apare într-un singur rând "Ursus 0.4l/1l" cu ambele prețuri,
+//     fiecare colorat separat după propriul prag (10 lei verde, 25 lei galben).
 //  M Tags — separate prin virgulă, ex. "Terasă, Card acceptat"
 const SHEET_ID = "1k3hrKZOD0iNxNxTQ6D875JaoGockyeuN";
 // sheet=Baruri pins the read to that exact tab name, so tab order in the
@@ -393,23 +396,25 @@ function sheetCell(row, i){
 }
 function parseSheetBeers(raw){
   if(!raw) return [];
-  const out = [];
-  raw.toString().split("|").map(s=>s.trim()).filter(Boolean).forEach(entry=>{
+  return raw.toString().split("|").map(s=>s.trim()).filter(Boolean).map(entry=>{
     const [name, priceRaw, volRaw] = entry.split(":").map(s=>s ? s.trim() : s);
     // Support multiple sizes for one beer via slashes on both sides, e.g.
-    // "Ursus:10/25:0.4l/1l" -> two line items, prices/volumes paired by
-    // position. A single value on one side (e.g. one price, two volumes)
-    // is reused for every size.
-    const prices = (priceRaw || "").split("/").map(s=>s.trim());
-    const vols = (volRaw || "").split("/").map(s=>s.trim());
-    const sizes = Math.max(prices.length, vols.length);
-    for(let i=0;i<sizes;i++){
-      const price = Number(prices[i] ?? prices[prices.length-1]) || 0;
-      const vol = vols[i] ?? vols[vols.length-1] ?? "";
-      out.push([name || "Bere", price, vol]);
+    // "Ursus:10/25:0.4l/1l" -> one menu line "Ursus 0.4l/1l" showing both
+    // prices, each colored by its own tier. Prices/volumes pair by
+    // position; a single value on one side is reused for every size.
+    const priceParts = (priceRaw || "").split("/").map(s=>s.trim());
+    const volParts = (volRaw || "").split("/").map(s=>s.trim());
+    if(priceParts.length === 1 && volParts.length === 1){
+      return [name || "Bere", Number(priceRaw) || 0, volRaw || ""];
     }
+    const sizes = Math.max(priceParts.length, volParts.length);
+    const prices = [], vols = [];
+    for(let i=0;i<sizes;i++){
+      prices.push(Number(priceParts[i] ?? priceParts[priceParts.length-1]) || 0);
+      vols.push(volParts[i] ?? volParts[volParts.length-1] ?? "");
+    }
+    return [name || "Bere", prices, vols];
   });
-  return out;
 }
 function parseSheetTags(raw){
   return raw ? raw.toString().split(",").map(s=>s.trim()).filter(Boolean) : [];
@@ -484,11 +489,20 @@ function isOpen(b){
 }
 function hasHHToday(b){ return !!(b.hh && b.hh.d.includes(dayNow)); }
 function hhLive(b){ return hasHHToday(b) && hourNow >= b.hh.from && hourNow < b.hh.to; }
-function cheapest(b){ return Math.min(...b.beers.map(x=>x[1])); }
+function cheapest(b){
+  return Math.min(...b.beers.flatMap(x=>Array.isArray(x[1]) ? x[1] : [x[1]]));
+}
 function priceClass(price){
   if(price<=15) return "cheap";
   if(price<=25) return "mid";
   return "pricey";
+}
+function renderBeerRow(x){
+  const prices = Array.isArray(x[1]) ? x[1] : [x[1]];
+  const vols = Array.isArray(x[2]) ? x[2] : [x[2]];
+  const volText = vols.join("/");
+  const priceHtml = prices.map(p=>`<span class="bp ${priceClass(p)}">${p} lei</span>`).join('<span class="bp-sep">/</span>');
+  return `<div class="beer"><span>${x[0]}<span class="bv">${volText}</span></span><span class="bp-group">${priceHtml}</span></div>`;
 }
 function fmtHours(b){
   const [o,c]=b.hours;
@@ -649,7 +663,7 @@ function openDetail(b){
     ${hasHHToday(b)?`<div class="hhbox">🍺 <b>Happy hour ${DAYS[dayNow].toLowerCase()}</b> ${b.hh.from}:00–${b.hh.to}:00 — ${b.hh.deal}${hhLive(b)?" · <b>chiar acum!</b>":""}</div>`:""}
     <div class="menu">
       <h3>Prețuri bere</h3>
-      ${b.beers.map(x=>`<div class="beer"><span>${x[0]}<span class="bv">${x[2]}</span></span><span class="bp ${priceClass(x[1])}">${x[1]} lei</span></div>`).join("")}
+      ${b.beers.map(renderBeerRow).join("")}
     </div>
     <div class="d-tags">${b.tags.map(t=>`<span>${t}</span>`).join("")}</div>
     <div class="d-note">Prețuri actualizate de comunitate · MVP cu date demonstrative</div>`;
