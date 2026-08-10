@@ -226,7 +226,7 @@
   </div>
 </header>
 
-<div class="demo-badge">MVP · date demonstrative</div>
+<div class="demo-badge" id="dataBadge">Se încarcă prețurile…</div>
 <button class="country-btn" id="btnCountry">🇷🇴 Toată România</button>
 
 <section class="drawer" id="drawer">
@@ -240,19 +240,17 @@
 <section class="detail" id="detail" aria-live="polite"></section>
 
 <script>
-// ---------------- Cities ----------------
-const CITIES = [
-  {n:"București",   lat:44.4340, lng:26.0960},
-  {n:"Cluj-Napoca", lat:46.7712, lng:23.6236},
-  {n:"Timișoara",   lat:45.7538, lng:21.2257},
-  {n:"Iași",        lat:47.1622, lng:27.5837},
-  {n:"Brașov",      lat:45.6427, lng:25.5887},
-  {n:"Constanța",   lat:44.1733, lng:28.6383},
-  {n:"Sighetu Marmației", lat:47.9196, lng:23.8776},
-];
+// ---------------- Live data (Google Sheet) ----------------
+// The site loads bars from a public Google Sheet on every page load (see
+// loadBarsFromSheet() near the bottom). CITIES is derived from whichever
+// bar list ends up active, so a new city in the sheet just works — no
+// code change needed. FALLBACK_BARS below is used only if the sheet
+// can't be reached (offline, sharing revoked, etc).
+let BARS = [];
+let CITIES = [];
 
-// ---------------- Demo data (fictional venues, real neighbourhoods) ----------------
-const BARS = [
+// ---------------- Fallback data (used if the sheet can't be reached) ----------------
+const FALLBACK_BARS = [
  // București
  {c:"București", n:"Berăria Lipscani", a:"Str. Lipscani 41, Centrul Vechi", lat:44.4318, lng:26.1005,
   hours:[12,26], hh:{d:[1,2,3,4,5],from:16,to:19,deal:"Ursus draft 8 lei"},
@@ -363,6 +361,82 @@ const BARS = [
   beers:[["Ursus",13,"0.4l"],["Pilsner Urquell",23,"0.5l"]],
   tags:["Hotel","Restaurant","Pin de test"]},
 ];
+
+// ---------------- Google Sheet loading ----------------
+// Sheet columns, one row per bar (row 1 = headers, data from row 2):
+//  A Oraș           B Nume            C Adresă
+//  D Lat             E Lng             F Deschide (oră, 0-23)
+//  G Închide (oră; peste miezul nopții scrie 24+, ex. 01:00 => 25)
+//  H HH Zile (ex. "Lun,Mar,Mie" — gol dacă nu are happy hour)
+//  I HH De la (oră)  J HH Până la (oră)  K HH Ofertă (text)
+//  L Beri — "Nume:Preț:Volum | Nume2:Preț2:Volum2" ex. "Ursus:13:0.4l | Pilsner Urquell:23:0.5l"
+//  M Tags — separate prin virgulă, ex. "Terasă, Card acceptat"
+const SHEET_ID = "13tS2iqOr9Xh2lnvkh1zRF2foJCduQNC1YVS0l5V7mHc";
+const SHEET_GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=1`;
+
+function dayIndexFromLabel(raw){
+  const s = raw.toString().trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+  const map = {dum:0, lun:1, mar:2, mie:3, joi:4, vin:5, sam:6};
+  return map[s.slice(0,3)] ?? null;
+}
+function sheetCell(row, i){
+  const cell = row.c && row.c[i];
+  return (cell && cell.v !== null && cell.v !== undefined) ? cell.v : "";
+}
+function parseSheetBeers(raw){
+  if(!raw) return [];
+  return raw.toString().split("|").map(s=>s.trim()).filter(Boolean).map(entry=>{
+    const [name, price, vol] = entry.split(":").map(s=>s ? s.trim() : s);
+    return [name || "Bere", Number(price) || 0, vol || ""];
+  });
+}
+function parseSheetTags(raw){
+  return raw ? raw.toString().split(",").map(s=>s.trim()).filter(Boolean) : [];
+}
+function parseSheetRow(row){
+  const c = sheetCell(row,0).toString().trim();
+  const n = sheetCell(row,1).toString().trim();
+  const latRaw = sheetCell(row,3), lngRaw = sheetCell(row,4);
+  const openRaw = sheetCell(row,5), closeRaw = sheetCell(row,6);
+  if(!c || !n || latRaw==="" || lngRaw==="" || openRaw==="" || closeRaw==="") return null;
+  const lat = Number(latRaw), lng = Number(lngRaw);
+  const openH = Number(openRaw), closeH = Number(closeRaw);
+  if(!isFinite(lat) || !isFinite(lng) || !isFinite(openH) || !isFinite(closeH)) return null;
+
+  const hhDaysRaw = sheetCell(row,7).toString();
+  let hh = null;
+  if(hhDaysRaw.trim()){
+    const days = hhDaysRaw.split(",").map(dayIndexFromLabel).filter(d=>d!==null);
+    const from = sheetCell(row,8), to = sheetCell(row,9);
+    if(days.length && from!=="" && to!==""){
+      hh = {d:days, from:Number(from), to:Number(to), deal:sheetCell(row,10).toString().trim()};
+    }
+  }
+
+  return {
+    c, n, a: sheetCell(row,2).toString().trim(), lat, lng,
+    hours: [openH, closeH], hh,
+    beers: parseSheetBeers(sheetCell(row,11)),
+    tags: parseSheetTags(sheetCell(row,12)),
+  };
+}
+async function loadBarsFromSheet(){
+  const res = await fetch(SHEET_GVIZ_URL, {cache:"no-store"});
+  if(!res.ok) throw new Error("HTTP "+res.status);
+  const text = await res.text();
+  const jsonText = text.slice(text.indexOf("(")+1, text.lastIndexOf(")"));
+  const data = JSON.parse(jsonText);
+  const rows = (data.table && data.table.rows) || [];
+  return rows.map(parseSheetRow).filter(Boolean);
+}
+function computeCities(bars){
+  const byCity = {};
+  bars.forEach(b=>{
+    const key = byCity[b.c] || (byCity[b.c] = {n:b.c, lat:0, lng:0, count:0});
+    key.lat += b.lat; key.lng += b.lng; key.count++;
+  });
+  return Object.values(byCity).map(c=>({n:c.n, lat:c.lat/c.count, lng:c.lng/c.count}));
+}
 
 const DAYS = ["Duminică","Luni","Marți","Miercuri","Joi","Vineri","Sâmbătă"];
 const RO_CENTER = [45.90, 25.00];
@@ -599,9 +673,28 @@ if(navigator.geolocation){
   },()=>{},{timeout:4000});
 }
 
-buildCityChips();
-render();
-markActiveCity();
+// ---------------- Boot: load live data, then render ----------------
+async function init(){
+  const badge = document.getElementById("dataBadge");
+  let bars = null;
+  try{
+    bars = await loadBarsFromSheet();
+  }catch(err){
+    console.warn("Nu am putut încărca datele din Google Sheets:", err);
+  }
+  if(bars && bars.length){
+    BARS = bars;
+    badge.textContent = "Date live · Google Sheets";
+  } else {
+    BARS = FALLBACK_BARS;
+    badge.textContent = "⚠ Sheet indisponibil · date demonstrative";
+  }
+  CITIES = computeCities(BARS);
+  buildCityChips();
+  render();
+  markActiveCity();
+}
+init();
 </script>
 </body>
 </html>
