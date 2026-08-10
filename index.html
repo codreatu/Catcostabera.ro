@@ -372,7 +372,10 @@ const FALLBACK_BARS = [
 //  L Beri — "Nume:Preț:Volum | Nume2:Preț2:Volum2" ex. "Ursus:13:0.4l | Pilsner Urquell:23:0.5l"
 //  M Tags — separate prin virgulă, ex. "Terasă, Card acceptat"
 const SHEET_ID = "13tS2iqOr9Xh2lnvkh1zRF2foJCduQNC1YVS0l5V7mHc";
-const SHEET_GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=1`;
+// sheet=Baruri pins the read to that exact tab name, so tab order in the
+// spreadsheet (e.g. an "Instrucțiuni" tab placed first) never matters.
+const SHEET_TAB_NAME = "Baruri";
+const SHEET_GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(SHEET_TAB_NAME)}`;
 
 function dayIndexFromLabel(raw){
   const s = raw.toString().trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
