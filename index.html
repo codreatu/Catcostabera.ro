@@ -366,7 +366,9 @@ const FALLBACK_BARS = [
 // Sheet columns, one row per bar (row 1 = headers, data from row 2):
 //  A Oraș           B Nume            C Adresă
 //  D Lat             E Lng             F Deschide (oră, 0-23)
-//  G Închide (oră; peste miezul nopții scrie 24+, ex. 01:00 => 25)
+//  G Închide (oră, 0-23 — ora reală de pe ceas; dacă e mai mică decât
+//     "Deschide" înseamnă că închide după miezul nopții, ex. Deschide 20,
+//     Închide 2 => program 20:00-02:00. Sistemul își dă seama singur.)
 //  H HH Zile (ex. "Lun,Mar,Mie" — gol dacă nu are happy hour)
 //  I HH De la (oră)  J HH Până la (oră)  K HH Ofertă (text)
 //  L Beri — "Nume:Preț:Volum | Nume2:Preț2:Volum2" ex. "Ursus:13:0.4l | Pilsner Urquell:23:0.5l"
@@ -403,8 +405,14 @@ function parseSheetRow(row){
   const openRaw = sheetCell(row,5), closeRaw = sheetCell(row,6);
   if(!c || !n || latRaw==="" || lngRaw==="" || openRaw==="" || closeRaw==="") return null;
   const lat = Number(latRaw), lng = Number(lngRaw);
-  const openH = Number(openRaw), closeH = Number(closeRaw);
+  const openH = Number(openRaw);
+  let closeH = Number(closeRaw);
   if(!isFinite(lat) || !isFinite(lng) || !isFinite(openH) || !isFinite(closeH)) return null;
+  // Sheet holds real clock hours (0-23). A closing hour at/before the
+  // opening hour means it closes after midnight — roll it past 24 here
+  // so the rest of the app (which works in that "overflow" scale) needs
+  // no further changes. E.g. Deschide 20, Închide 2 -> stored as [20,26].
+  if(closeH <= openH) closeH += 24;
 
   const hhDaysRaw = sheetCell(row,7).toString();
   let hh = null;
