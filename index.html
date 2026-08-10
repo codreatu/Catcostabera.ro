@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+<title>Cât Costă Berea? — Harta prețurilor la bere în România</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root{
+    --stout:#1B1207;
+    --stout-2:#2A1D0E;
+    --foam:#FBF3E4;
+    --lager:#F0A31A;
+    --amber:#C56E1A;
+    --hop:#5B8A4A;
+    --line:rgba(251,243,228,.14);
+    --cheap:#5FAE4A;
+    --mid:#F0A31A;
+    --pricey:#D6503F;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{font-family:'Archivo',system-ui,sans-serif;background:var(--stout);color:var(--foam);overflow:hidden}
+  #map{position:fixed;inset:0;z-index:1;background:#12100c}
+  .leaflet-container{font-family:'Archivo',sans-serif}
+
+  /* ---------- Bottle-cap price markers ---------- */
+  .cap{
+    width:46px;height:46px;border-radius:50%;
+    background:var(--lager);color:var(--stout);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    font-weight:700;line-height:1;
+    box-shadow:0 3px 10px rgba(0,0,0,.55);
+    border:2px solid var(--stout);
+    position:relative;transition:transform .12s ease;
+  }
+  .cap::before{
+    content:"";position:absolute;inset:-5px;border-radius:50%;z-index:-1;
+    background:repeating-conic-gradient(var(--lager) 0deg 9deg, transparent 9deg 18deg);
+  }
+  .cap.cheap{background:var(--cheap)}
+  .cap.cheap::before{background:repeating-conic-gradient(var(--cheap) 0deg 9deg, transparent 9deg 18deg)}
+  .cap.mid{background:var(--mid)}
+  .cap.mid::before{background:repeating-conic-gradient(var(--mid) 0deg 9deg, transparent 9deg 18deg)}
+  .cap.pricey{background:var(--pricey)}
+  .cap.pricey::before{background:repeating-conic-gradient(var(--pricey) 0deg 9deg, transparent 9deg 18deg)}
+  .cap.closed{background:#6b6257}
+  .cap.closed::before{background:repeating-conic-gradient(#6b6257 0deg 9deg, transparent 9deg 18deg)}
+  .cap.hh::after{
+    content:"HH";position:absolute;top:-12px;right:-14px;
+    background:var(--hop);color:var(--foam);font-size:9px;font-weight:700;
+    padding:2px 5px;border-radius:99px;letter-spacing:.5px;border:1.5px solid var(--stout);
+  }
+  .cap .lei{font-size:15px}
+  .cap .cur{font-size:8px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;margin-top:1px}
+  .cap:hover{transform:scale(1.12)}
+  .capwrap{background:none;border:none}
+
+  /* ---------- City aggregate markers (national zoom) ---------- */
+  .citycap{
+    min-width:72px;padding:8px 10px 7px;border-radius:12px;
+    background:var(--stout);border:2px solid var(--lager);
+    color:var(--foam);text-align:center;line-height:1.15;
+    box-shadow:0 4px 14px rgba(0,0,0,.6);cursor:pointer;
+    transition:transform .12s ease;white-space:nowrap;
+  }
+  .citycap:hover{transform:scale(1.07)}
+  .citycap .cn{font-family:'Archivo Black';font-size:12px}
+  .citycap .cs{font-size:10.5px;margin-top:2px;opacity:.9}
+  .citycap .cs b{color:var(--lager)}
+
+  /* ---------- Top bar ---------- */
+  header{
+    position:fixed;top:0;left:0;right:0;z-index:1000;
+    padding:calc(10px + env(safe-area-inset-top)) 12px 10px;
+    background:linear-gradient(to bottom, rgba(27,18,7,.96) 60%, rgba(27,18,7,0));
+    pointer-events:none;
+  }
+  .brand{display:flex;align-items:center;gap:10px;pointer-events:auto}
+  .brand-cap{
+    width:34px;height:34px;border-radius:50%;flex:none;
+    background:var(--lager);display:flex;align-items:center;justify-content:center;
+    font-family:'Archivo Black';font-size:15px;color:var(--stout);
+    box-shadow:inset 0 0 0 2px var(--stout), 0 0 0 3px var(--lager);
+  }
+  h1{font-family:'Archivo Black',sans-serif;font-size:19px;letter-spacing:.2px}
+  h1 span{color:var(--lager)}
+  .sub{font-size:11px;opacity:.75;margin-top:1px}
+
+  .row{display:flex;gap:8px;margin-top:10px;overflow-x:auto;padding-bottom:4px;pointer-events:auto;scrollbar-width:none}
+  .row::-webkit-scrollbar{display:none}
+  .chip{
+    flex:none;display:flex;align-items:center;gap:6px;
+    background:var(--stout-2);border:1px solid var(--line);color:var(--foam);
+    font-family:'Archivo';font-size:13px;font-weight:600;
+    padding:8px 14px;border-radius:99px;cursor:pointer;white-space:nowrap;
+  }
+  .chip.on{background:var(--lager);color:var(--stout);border-color:var(--lager)}
+  .chip.city.on{background:var(--foam);border-color:var(--foam)}
+  .chip:focus-visible,.iconbtn:focus-visible,.listrow:focus-visible{outline:2px solid var(--lager);outline-offset:2px}
+  .price-chip input{accent-color:var(--amber);width:90px}
+
+  /* ---------- List drawer ---------- */
+  .drawer{
+    position:fixed;left:0;right:0;bottom:0;z-index:1001;
+    background:var(--stout);border-top:1px solid var(--line);
+    border-radius:18px 18px 0 0;
+    transform:translateY(calc(100% - 58px));
+    transition:transform .25s ease;
+    max-height:72vh;display:flex;flex-direction:column;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .drawer.open{transform:translateY(0)}
+  .drawer-handle{
+    padding:10px 16px 12px;cursor:pointer;text-align:left;position:relative;
+    background:none;border:none;color:var(--foam);width:100%;
+    font-family:'Archivo';display:flex;align-items:center;justify-content:space-between;
+  }
+  .drawer-handle b{font-size:14px}
+  .drawer-handle .bar-count{color:var(--lager)}
+  .drawer-handle::before{
+    content:"";position:absolute;top:6px;left:50%;transform:translateX(-50%);
+    width:36px;height:4px;border-radius:99px;background:var(--line);
+  }
+  .list{overflow-y:auto;padding:0 8px 12px}
+  .listrow{
+    display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+    background:none;border:none;border-bottom:1px solid var(--line);
+    padding:12px 8px;cursor:pointer;color:var(--foam);font-family:'Archivo';
+  }
+  .listrow .mini{
+    width:44px;height:44px;border-radius:50%;flex:none;
+    background:var(--lager);color:var(--stout);font-weight:700;font-size:14px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .listrow.closed-row .mini{background:#6b6257}
+  .listrow .rn{font-weight:700;font-size:14px}
+  .listrow .rm{font-size:12px;opacity:.7;margin-top:2px}
+  .listrow .tag-hh{color:#a5d194;font-weight:700}
+  .listrow .dist{margin-left:auto;font-size:12px;opacity:.75;flex:none;text-align:right}
+  .listrow .dist .cty{display:block;font-size:10px;opacity:.7}
+
+  /* ---------- Detail card ---------- */
+  .detail{
+    position:fixed;left:0;right:0;bottom:0;z-index:1002;
+    background:var(--stout);border-top:2px solid var(--lager);
+    border-radius:18px 18px 0 0;
+    transform:translateY(105%);transition:transform .25s ease;
+    max-height:78vh;overflow-y:auto;
+    padding:18px 18px calc(18px + env(safe-area-inset-bottom));
+  }
+  .detail.open{transform:translateY(0)}
+  .d-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .d-name{font-family:'Archivo Black';font-size:21px;line-height:1.15}
+  .d-meta{font-size:13px;opacity:.75;margin-top:4px}
+  .iconbtn{
+    background:var(--stout-2);border:1px solid var(--line);color:var(--foam);
+    width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;flex:none;
+  }
+  .status{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;margin-top:10px}
+  .dot{width:8px;height:8px;border-radius:50%}
+  .status.o{color:#8fc47e}.status.o .dot{background:#8fc47e}
+  .status.c{color:#e08a80}.status.c .dot{background:#e08a80}
+  .hhbox{
+    margin-top:12px;background:rgba(91,138,74,.16);border:1px solid rgba(91,138,74,.5);
+    border-radius:10px;padding:10px 12px;font-size:13px;
+  }
+  .hhbox b{color:#a5d194}
+  .menu{margin-top:16px}
+  .menu h3{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;opacity:.6;margin-bottom:8px}
+  .beer{display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;border-bottom:1px dashed var(--line);font-size:14.5px}
+  .beer .bp{font-weight:700;color:var(--lager);font-size:15px}
+  .beer .bv{opacity:.55;font-size:12px;margin-left:6px}
+  .d-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+  .d-tags span{font-size:12px;background:var(--stout-2);border:1px solid var(--line);padding:4px 10px;border-radius:99px}
+  .d-note{font-size:11px;opacity:.5;margin-top:14px}
+
+  .demo-badge{
+    position:fixed;z-index:999;right:10px;bottom:66px;
+    font-size:10px;letter-spacing:.6px;background:rgba(27,18,7,.85);
+    border:1px solid var(--line);padding:4px 8px;border-radius:6px;opacity:.85;
+  }
+  .country-btn{
+    position:fixed;z-index:999;left:10px;bottom:66px;
+    background:rgba(27,18,7,.9);border:1px solid var(--line);color:var(--foam);
+    font-family:'Archivo';font-size:12px;font-weight:600;
+    padding:8px 12px;border-radius:99px;cursor:pointer;
+  }
+  .leaflet-control-attribution{background:rgba(27,18,7,.7)!important;color:#a99!important;font-size:9px!important}
+  .leaflet-control-attribution a{color:#c9a!important}
+  @media (prefers-reduced-motion: reduce){.drawer,.detail,.cap,.citycap{transition:none}}
+  @media(min-width:760px){
+    .drawer,.detail{left:auto;right:16px;width:400px;border-radius:14px}
+    .drawer{bottom:16px}
+    .detail{bottom:16px;border:1px solid var(--line);border-top:2px solid var(--lager)}
+  }
+</style>
+</head>
+<body>
+
+<div id="map" role="application" aria-label="Harta barurilor din România"></div>
+
+<header>
+  <div class="brand">
+    <div class="brand-cap">B</div>
+    <div>
+      <h1>Cât Costă <span>Berea?</span></h1>
+      <div class="sub">Prețuri la bere în <b>România</b> · <span id="statCount"></span></div>
+    </div>
+  </div>
+  <div class="row" id="cityRow" role="toolbar" aria-label="Orașe"></div>
+  <div class="row" role="toolbar" aria-label="Filtre">
+    <button class="chip" id="fOpen" aria-pressed="false">● Deschis acum</button>
+    <button class="chip" id="fHH" aria-pressed="false">🍺 Happy hour azi</button>
+    <label class="chip price-chip">Max <span id="pv">25</span> lei
+      <input type="range" id="fPrice" min="6" max="25" value="25" aria-label="Preț maxim">
+    </label>
+    <button class="chip" id="fCheap" aria-pressed="false">↓ Cele mai ieftine</button>
+  </div>
+</header>
+
+<div class="demo-badge">MVP · date demonstrative</div>
+<button class="country-btn" id="btnCountry">🇷🇴 Toată România</button>
+
+<section class="drawer" id="drawer">
+  <button class="drawer-handle" id="drawerToggle" aria-expanded="false">
+    <b><span class="bar-count" id="listCount">0</span> baruri</b>
+    <span id="drawerArrow">▲</span>
+  </button>
+  <div class="list" id="list"></div>
+</section>
+
+<section class="detail" id="detail" aria-live="polite"></section>
+
+<script>
+// ---------------- Cities ----------------
+const CITIES = [
+  {n:"București",   lat:44.4340, lng:26.0960},
+  {n:"Cluj-Napoca", lat:46.7712, lng:23.6236},
+  {n:"Timișoara",   lat:45.7538, lng:21.2257},
+  {n:"Iași",        lat:47.1622, lng:27.5837},
+  {n:"Brașov",      lat:45.6427, lng:25.5887},
+  {n:"Constanța",   lat:44.1733, lng:28.6383},
+];
+
+// ---------------- Demo data (fictional venues, real neighbourhoods) ----------------
+const BARS = [
+ // București
+ {c:"București", n:"Berăria Lipscani", a:"Str. Lipscani 41, Centrul Vechi", lat:44.4318, lng:26.1005,
+  hours:[12,26], hh:{d:[1,2,3,4,5],from:16,to:19,deal:"Ursus draft 8 lei"},
+  beers:[["Ursus draft",10,"0.5l"],["Timișoreana",9,"0.5l"],["Silva Dark",13,"0.5l"],["IPA artizanală",17,"0.4l"]],
+  tags:["Terasă","Ecran sport","Card acceptat"]},
+ {c:"București", n:"Halba la Smârdan", a:"Str. Smârdan 18, Centrul Vechi", lat:44.4306, lng:26.1019,
+  hours:[14,27], hh:null,
+  beers:[["Timișoreana",8,"0.5l"],["Ciucaș",9,"0.5l"],["Staropramen",12,"0.5l"]],
+  tags:["Fumători afară","Cash & card"]},
+ {c:"București", n:"Fabrica de Hamei", a:"Șos. Ștefan cel Mare 12, Floreasca", lat:44.4562, lng:26.1013,
+  hours:[16,26], hh:{d:[3,4],from:17,to:20,deal:"2+1 la craft"},
+  beers:[["Pale Ale local",15,"0.4l"],["Weissbier",16,"0.5l"],["Lager craft",14,"0.4l"]],
+  tags:["Craft","Quiz miercuri","Pet friendly"]},
+ {c:"București", n:"Pinta Studențească", a:"Bd. Regie 6, Grozăvești", lat:44.4442, lng:26.0530,
+  hours:[15,28], hh:{d:[1,2,3,4],from:18,to:21,deal:"Ciucaș 6 lei"},
+  beers:[["Ciucaș",7,"0.5l"],["Bergenbier",8,"0.5l"],["Ursus",9,"0.5l"]],
+  tags:["Beer pong","Studenți","Cash"]},
+ {c:"București", n:"Hop & Obor", a:"Piața Obor, Hala veche", lat:44.4499, lng:26.1266,
+  hours:[10,23], hh:null,
+  beers:[["Bere la halbă",6,"0.5l"],["Bergenbier",7,"0.5l"]],
+  tags:["Legendar","Mici + bere","Cash"]},
+ {c:"București", n:"Curtea cu Bere Cotroceni", a:"Str. Dr. Lister 22, Cotroceni", lat:44.4325, lng:26.0658,
+  hours:[13,25], hh:{d:[5],from:17,to:19,deal:"Halbă + mici 15 lei"},
+  beers:[["Ursus draft",9,"0.5l"],["Azuga",10,"0.5l"],["Silva blonde",11,"0.5l"]],
+  tags:["Curte interioară","Mâncare"]},
+ {c:"București", n:"Terasa Herăstrău", a:"Parcul Herăstrău, intr. Charles de Gaulle", lat:44.4702, lng:26.0788,
+  hours:[11,25], hh:null,
+  beers:[["Peroni",16,"0.33l"],["Ursus",13,"0.5l"],["Radler",12,"0.5l"]],
+  tags:["Pe lac","Terasă mare"]},
+ {c:"București", n:"Craft Corner Dorobanți", a:"Calea Dorobanți 155", lat:44.4571, lng:26.0902,
+  hours:[16,26], hh:{d:[2],from:18,to:20,deal:"-30% la IPA"},
+  beers:[["IPA",18,"0.4l"],["Sour cherry",19,"0.33l"],["Lager craft",15,"0.4l"]],
+  tags:["Craft","Degustări"]},
+
+ // Cluj-Napoca
+ {c:"Cluj-Napoca", n:"Halba din Unirii", a:"Piața Unirii 24", lat:46.7694, lng:23.5899,
+  hours:[12,26], hh:{d:[1,2,3],from:17,to:19,deal:"Lager local 8 lei"},
+  beers:[["Ursus draft",11,"0.5l"],["Lager craft",14,"0.4l"],["Weiss",15,"0.5l"]],
+  tags:["Terasă în piață","Card"]},
+ {c:"Cluj-Napoca", n:"Berea din Zorilor", a:"Str. Observatorului 3, Zorilor", lat:46.7549, lng:23.5872,
+  hours:[15,27], hh:{d:[1,2,3,4],from:18,to:21,deal:"Studenți -25%"},
+  beers:[["Ciucaș",8,"0.5l"],["Timișoreana",8,"0.5l"],["Ursus",10,"0.5l"]],
+  tags:["Studenți","Beer pong"]},
+ {c:"Cluj-Napoca", n:"Hameiul din Mănăștur", a:"Calea Florești 58, Mănăștur", lat:46.7581, lng:23.5511,
+  hours:[14,25], hh:null,
+  beers:[["Bergenbier",7,"0.5l"],["Ciucaș",8,"0.5l"]],
+  tags:["De cartier","Cash"]},
+ {c:"Cluj-Napoca", n:"Craft pe Someș", a:"Splaiul Independenței 10", lat:46.7766, lng:23.6009,
+  hours:[16,26], hh:{d:[4],from:17,to:20,deal:"2+1 la IPA"},
+  beers:[["IPA",17,"0.4l"],["Pale Ale",15,"0.4l"],["Sour",18,"0.33l"]],
+  tags:["Craft","Pe malul apei","Pet friendly"]},
+
+ // Timișoara
+ {c:"Timișoara", n:"Halba din Piața Operei", a:"Piața Victoriei 5", lat:45.7530, lng:21.2247,
+  hours:[12,25], hh:{d:[5],from:16,to:19,deal:"Timișoreana 6 lei"},
+  beers:[["Timișoreana",8,"0.5l"],["Ursus",10,"0.5l"],["Staropramen",13,"0.5l"]],
+  tags:["Terasă","Istoric"]},
+ {c:"Timișoara", n:"Bega Beer Garden", a:"Splaiul Nicolae Titulescu 8", lat:45.7492, lng:21.2331,
+  hours:[14,26], hh:null,
+  beers:[["Lager craft",13,"0.4l"],["Radler",10,"0.5l"],["Weiss",14,"0.5l"]],
+  tags:["Pe Bega","Grădină"]},
+ {c:"Timișoara", n:"Pinta din Complex", a:"Aleea Studenților 2", lat:45.7452, lng:21.2410,
+  hours:[15,28], hh:{d:[1,2,3,4],from:19,to:22,deal:"Halbă 5 lei"},
+  beers:[["Bere la halbă",6,"0.5l"],["Ciucaș",7,"0.5l"]],
+  tags:["Studenți","Cash","Beer pong"]},
+
+ // Iași
+ {c:"Iași", n:"Bolta cu Bere", a:"Str. Lăpușneanu 12", lat:47.1685, lng:27.5768,
+  hours:[13,25], hh:{d:[3],from:17,to:19,deal:"Bere + covrig 10 lei"},
+  beers:[["Ursus",10,"0.5l"],["Ciucaș",8,"0.5l"],["Silva",12,"0.5l"]],
+  tags:["Pietonal","Terasă"]},
+ {c:"Iași", n:"Hamei în Copou", a:"Bd. Carol I 30, Copou", lat:47.1786, lng:27.5719,
+  hours:[15,27], hh:{d:[1,2,3,4],from:18,to:21,deal:"Studenți: 2+1"},
+  beers:[["Ciucaș",7,"0.5l"],["Bergenbier",7,"0.5l"],["Ursus",9,"0.5l"]],
+  tags:["Studenți","Quiz joi"]},
+ {c:"Iași", n:"Craft la Palas", a:"Str. Palas 7A", lat:47.1580, lng:27.5878,
+  hours:[12,24], hh:null,
+  beers:[["IPA",17,"0.4l"],["Lager craft",14,"0.4l"]],
+  tags:["Craft","Card","Mâncare"]},
+
+ // Brașov
+ {c:"Brașov", n:"Halba din Piața Sfatului", a:"Piața Sfatului 16", lat:45.6421, lng:25.5887,
+  hours:[11,25], hh:null,
+  beers:[["Ciucaș",9,"0.5l"],["Ursus",11,"0.5l"],["Silva Dark",13,"0.5l"]],
+  tags:["Vedere la Tâmpa","Terasă"]},
+ {c:"Brașov", n:"Bere sub Tâmpa", a:"Str. Republicii 45", lat:45.6403, lng:25.5920,
+  hours:[14,26], hh:{d:[2,4],from:17,to:19,deal:"Ciucaș 7 lei"},
+  beers:[["Ciucaș",8,"0.5l"],["Zăganu",14,"0.5l"],["IPA",16,"0.4l"]],
+  tags:["Pietonal","Craft & clasic"]},
+ {c:"Brașov", n:"Pivnița Șchei", a:"Str. Prundului 9, Șchei", lat:45.6358, lng:25.5831,
+  hours:[16,25], hh:null,
+  beers:[["Bere la halbă",7,"0.5l"],["Azuga",9,"0.5l"]],
+  tags:["Pivniță istorică","Cash"]},
+
+ // Constanța
+ {c:"Constanța", n:"Halba de la Cazino", a:"Bd. Elisabeta 2, Faleză", lat:44.1710, lng:28.6620,
+  hours:[12,26], hh:{d:[5,6],from:17,to:19,deal:"Radler 8 lei"},
+  beers:[["Ursus",12,"0.5l"],["Radler",10,"0.5l"],["Peroni",16,"0.33l"]],
+  tags:["Vedere la mare","Terasă"]},
+ {c:"Constanța", n:"Bere pe Plajă Mamaia", a:"Mamaia, zona Cazino", lat:44.2372, lng:28.6180,
+  hours:[10,28], hh:null,
+  beers:[["Bergenbier",9,"0.5l"],["Ursus",11,"0.5l"],["Corona",18,"0.33l"]],
+  tags:["Pe nisip","Sezonier"]},
+];
+
+const DAYS = ["Duminică","Luni","Marți","Miercuri","Joi","Vineri","Sâmbătă"];
+const RO_CENTER = [45.90, 25.00];
+const RO_ZOOM_DESK = 7, RO_ZOOM_MOB = 6;
+const CITY_ZOOM = 13;
+const ZOOM_SPLIT = 10; // below this: city badges; at/above: bar caps
+let userPos = null;
+
+// ---------------- Helpers ----------------
+const now = new Date();
+const hourNow = now.getHours() + now.getMinutes()/60;
+const dayNow = now.getDay();
+
+function isOpen(b){
+  const [o,c] = b.hours;
+  const h = hourNow < 6 ? hourNow + 24 : hourNow;
+  return h >= o && h < c;
+}
+function hasHHToday(b){ return !!(b.hh && b.hh.d.includes(dayNow)); }
+function hhLive(b){ return hasHHToday(b) && hourNow >= b.hh.from && hourNow < b.hh.to; }
+function cheapest(b){ return Math.min(...b.beers.map(x=>x[1])); }
+function priceClass(price){
+  if(price<=15) return "cheap";
+  if(price<=25) return "mid";
+  return "pricey";
+}
+function fmtHours(b){
+  const [o,c]=b.hours;
+  return `${String(o).padStart(2,"0")}:00 – ${String(c%24).padStart(2,"0")}:00`;
+}
+function distKm(lat,lng,from){
+  const R=6371, dLat=(lat-from.lat)*Math.PI/180, dLng=(lng-from.lng)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2 + Math.cos(from.lat*Math.PI/180)*Math.cos(lat*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function refPoint(){
+  if(userPos) return userPos;
+  const c = map.getCenter();
+  return {lat:c.lat, lng:c.lng};
+}
+
+// ---------------- Map ----------------
+const isMobile = matchMedia("(max-width:760px)").matches;
+const map = L.map("map",{zoomControl:false, worldCopyJump:true})
+  .setView(RO_CENTER, isMobile ? RO_ZOOM_MOB : RO_ZOOM_DESK);
+map.setMaxBounds([[42.5,19.0],[49.3,31.5]]); // keep navigation around Romania
+map.options.minZoom = 6;
+L.control.zoom({position:"bottomleft"}).addTo(map);
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{
+  attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:19
+}).addTo(map);
+
+let markers = [];
+
+// ---------------- Filters ----------------
+const state = {open:false, hh:false, maxPrice:25, cheapSort:false, city:null};
+
+function passes(b){
+  if(state.open && !isOpen(b)) return false;
+  if(state.hh && !hasHHToday(b)) return false;
+  if(cheapest(b) > state.maxPrice) return false;
+  return true;
+}
+
+// ---------------- Render ----------------
+function render(){
+  markers.forEach(m=>map.removeLayer(m)); markers=[];
+  const zoom = map.getZoom();
+  const filtered = BARS.filter(passes);
+  const ref = refPoint();
+
+  if(zoom < ZOOM_SPLIT){
+    // National view: one badge per city
+    CITIES.forEach(city=>{
+      const inCity = filtered.filter(b=>b.c===city.n);
+      if(!inCity.length) return;
+      const min = Math.min(...inCity.map(cheapest));
+      const icon = L.divIcon({className:"capwrap", iconSize:null, iconAnchor:[36,20],
+        html:`<div class="citycap" role="button" aria-label="${city.n}: ${inCity.length} baruri de la ${min} lei">
+                <div class="cn">${city.n}</div>
+                <div class="cs">${inCity.length} baruri · de la <b>${min} lei</b></div>
+              </div>`});
+      const m = L.marker([city.lat,city.lng],{icon}).addTo(map)
+        .on("click",()=>goToCity(city));
+      markers.push(m);
+    });
+  } else {
+    // City view: bottle caps
+    filtered.forEach(b=>{
+      const open = isOpen(b);
+      const cls = "cap" + (open ? " "+priceClass(cheapest(b)) : " closed") + (hhLive(b)?" hh":"");
+      const icon = L.divIcon({className:"capwrap", iconSize:[46,46], iconAnchor:[23,23],
+        html:`<div class="${cls}" role="button" aria-label="${b.n}, de la ${cheapest(b)} lei"><span class="lei">${cheapest(b)}</span><span class="cur">lei</span></div>`});
+      const m = L.marker([b.lat,b.lng],{icon}).addTo(map).on("click",()=>openDetail(b));
+      markers.push(m);
+    });
+  }
+
+  // List: bars in current view (or whole country at national zoom)
+  let listBars = zoom < ZOOM_SPLIT ? filtered
+    : filtered.filter(b=>map.getBounds().pad(0.2).contains([b.lat,b.lng]));
+  if(!listBars.length) listBars = filtered; // fallback so list is never empty
+  listBars = [...listBars].sort((a,b)=> state.cheapSort
+    ? cheapest(a)-cheapest(b)
+    : distKm(a.lat,a.lng,ref)-distKm(b.lat,b.lng,ref));
+
+  document.getElementById("statCount").textContent =
+    `${filtered.length} baruri în ${new Set(filtered.map(b=>b.c)).size} orașe`;
+  document.getElementById("listCount").textContent = listBars.length;
+
+  const list = document.getElementById("list");
+  list.innerHTML = listBars.map(b=>{
+    const open=isOpen(b);
+    return `<button class="listrow ${open?"":"closed-row"}" data-i="${BARS.indexOf(b)}">
+      <span class="mini">${cheapest(b)}</span>
+      <span>
+        <div class="rn">${b.n}</div>
+        <div class="rm">${open?"Deschis":"Închis"} · de la ${cheapest(b)} lei
+          ${hhLive(b)?'· <span class="tag-hh">Happy hour ACUM</span>':hasHHToday(b)?'· <span class="tag-hh">HH azi '+b.hh.from+'–'+b.hh.to+'</span>':""}
+        </div>
+      </span>
+      <span class="dist">${distKm(b.lat,b.lng,ref).toFixed(1)} km<span class="cty">${b.c}</span></span>
+    </button>`;
+  }).join("") || `<div style="padding:24px 12px;font-size:14px;opacity:.7">Niciun bar nu trece de filtre. Ridică prețul maxim sau scoate un filtru.</div>`;
+
+  list.querySelectorAll(".listrow").forEach(r=>r.addEventListener("click",()=>{
+    const b = BARS[+r.dataset.i];
+    map.flyTo([b.lat,b.lng], Math.max(map.getZoom(), CITY_ZOOM), {duration:.8});
+    openDetail(b); toggleDrawer(false);
+  }));
+}
+
+// ---------------- City navigation ----------------
+const cityRow = document.getElementById("cityRow");
+function buildCityChips(){
+  cityRow.innerHTML = CITIES.map(c=>{
+    const n = BARS.filter(b=>b.c===c.n).length;
+    return `<button class="chip city" data-c="${c.n}" aria-pressed="false">${c.n} <span style="opacity:.6">${n}</span></button>`;
+  }).join("");
+  cityRow.querySelectorAll(".chip").forEach(ch=>ch.addEventListener("click",()=>{
+    goToCity(CITIES.find(c=>c.n===ch.dataset.c));
+  }));
+}
+function markActiveCity(){
+  const zoom = map.getZoom();
+  const c = map.getCenter();
+  let active = null;
+  if(zoom >= ZOOM_SPLIT){
+    active = CITIES.reduce((best,city)=>{
+      const d = distKm(city.lat,city.lng,{lat:c.lat,lng:c.lng});
+      return (!best || d < best.d) ? {n:city.n, d} : best;
+    }, null);
+    if(active && active.d > 60) active = null;
+  }
+  cityRow.querySelectorAll(".chip").forEach(ch=>{
+    const on = active && ch.dataset.c === active.n;
+    ch.classList.toggle("on", on);
+    ch.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+}
+function goToCity(city){
+  detail.classList.remove("open");
+  map.flyTo([city.lat,city.lng], CITY_ZOOM, {duration:1.1});
+}
+document.getElementById("btnCountry").addEventListener("click",()=>{
+  detail.classList.remove("open");
+  map.flyTo(RO_CENTER, isMobile ? RO_ZOOM_MOB : RO_ZOOM_DESK, {duration:1.1});
+});
+
+// ---------------- Detail ----------------
+const detail = document.getElementById("detail");
+function openDetail(b){
+  const open = isOpen(b);
+  detail.innerHTML = `
+    <div class="d-top">
+      <div>
+        <div class="d-name">${b.n}</div>
+        <div class="d-meta">${b.a} · ${b.c} · ${distKm(b.lat,b.lng,refPoint()).toFixed(1)} km</div>
+      </div>
+      <button class="iconbtn" id="dClose" aria-label="Închide">✕</button>
+    </div>
+    <div class="status ${open?"o":"c"}"><span class="dot"></span>${open?"Deschis acum":"Închis acum"} · Program azi ${fmtHours(b)}</div>
+    ${hasHHToday(b)?`<div class="hhbox">🍺 <b>Happy hour ${DAYS[dayNow].toLowerCase()}</b> ${b.hh.from}:00–${b.hh.to}:00 — ${b.hh.deal}${hhLive(b)?" · <b>chiar acum!</b>":""}</div>`:""}
+    <div class="menu">
+      <h3>Prețuri bere</h3>
+      ${b.beers.map(x=>`<div class="beer"><span>${x[0]}<span class="bv">${x[2]}</span></span><span class="bp">${x[1]} lei</span></div>`).join("")}
+    </div>
+    <div class="d-tags">${b.tags.map(t=>`<span>${t}</span>`).join("")}</div>
+    <div class="d-note">Prețuri actualizate de comunitate · MVP cu date demonstrative</div>`;
+  detail.classList.add("open");
+  document.getElementById("dClose").addEventListener("click",()=>detail.classList.remove("open"));
+}
+map.on("click",()=>detail.classList.remove("open"));
+
+// ---------------- Drawer ----------------
+const drawer = document.getElementById("drawer");
+function toggleDrawer(force){
+  const open = force!==undefined ? force : !drawer.classList.contains("open");
+  drawer.classList.toggle("open",open);
+  document.getElementById("drawerToggle").setAttribute("aria-expanded",open);
+  document.getElementById("drawerArrow").textContent = open ? "▼" : "▲";
+}
+document.getElementById("drawerToggle").addEventListener("click",()=>toggleDrawer());
+
+// ---------------- Filter wiring ----------------
+function wireChip(id,key){
+  const el=document.getElementById(id);
+  el.addEventListener("click",()=>{
+    state[key]=!state[key];
+    el.classList.toggle("on",state[key]);
+    el.setAttribute("aria-pressed",state[key]);
+    render();
+  });
+}
+wireChip("fOpen","open"); wireChip("fHH","hh"); wireChip("fCheap","cheapSort");
+document.getElementById("fPrice").addEventListener("input",e=>{
+  state.maxPrice=+e.target.value;
+  document.getElementById("pv").textContent=e.target.value;
+  render();
+});
+
+// Re-render on navigation (debounced)
+let t=null;
+map.on("zoomend moveend",()=>{
+  clearTimeout(t);
+  t=setTimeout(()=>{render(); markActiveCity();},120);
+});
+
+// ---------------- Geolocation (optional) ----------------
+if(navigator.geolocation){
+  navigator.geolocation.getCurrentPosition(p=>{
+    userPos={lat:p.coords.latitude,lng:p.coords.longitude};
+    render();
+  },()=>{},{timeout:4000});
+}
+
+buildCityChips();
+render();
+markActiveCity();
+</script>
+</body>
+</html>
