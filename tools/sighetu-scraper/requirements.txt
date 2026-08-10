@@ -1,3 +1,9 @@
-requests>=2.31
+# Shared
 pandas>=2.0
 openpyxl>=3.1
+
+# scrape_sighetu_bars_restaurants.py (official Google Places API)
+requests>=2.31
+
+# scrape_google_maps_yelp_no_api.py (no-API browser scraping)
+playwright>=1.44
