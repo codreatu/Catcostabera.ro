@@ -244,8 +244,21 @@
     font-family:'Archivo';font-size:14px;font-weight:700;padding:9px 12px;border-radius:9px;cursor:pointer;
   }
   .pin-btn.picking{background:var(--lager);color:var(--stout)}
-  .pin-status{font-size:12px;opacity:.6;padding-right:8px}
+  .pin-btn.loading{opacity:.6;pointer-events:none}
+  .pin-status{font-size:12px;opacity:.6;padding-right:8px;text-align:right}
   .pin-status.set{opacity:1;color:var(--cheap)}
+  .pin-status.err{opacity:1;color:var(--pricey)}
+  .geo-fallback{font-size:11.5px;opacity:.55;margin-top:6px;text-align:right}
+  .pin-link{background:none;border:none;color:var(--foam);text-decoration:underline;font-family:'Archivo';font-size:11.5px;cursor:pointer;padding:0}
+  .pin-link.picking{color:var(--lager);font-weight:700}
+  .geo-results{margin-top:8px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .geo-result{
+    display:block;width:100%;text-align:left;background:var(--stout-2);border:none;border-bottom:1px solid var(--line);
+    color:var(--foam);font-family:'Archivo';font-size:12.5px;line-height:1.4;padding:10px 12px;cursor:pointer;
+  }
+  .geo-result:last-child{border-bottom:none}
+  .geo-result:hover{background:#33240f}
+  .geo-attrib{font-size:10px;opacity:.4;text-align:right;padding:6px 12px 2px;background:var(--stout-2)}
   .beer-block{
     margin-top:10px;border:1px dashed var(--line);border-radius:12px;padding:12px;position:relative;
   }
@@ -350,8 +363,12 @@
     <div class="field">
       <label>Locație pe hartă</label>
       <div class="pin-row">
-        <button type="button" class="pin-btn" id="afPinBtn">📍 Pune pin</button>
+        <button type="button" class="pin-btn" id="afGeoBtn">🔍 Caută adresa pe hartă</button>
         <span class="pin-status" id="afPinStatus">nesetat</span>
+      </div>
+      <div id="afGeoResults"></div>
+      <div class="geo-fallback">
+        sau <button type="button" class="pin-link" id="afPinBtn">📍 pune pinul manual pe hartă</button>
       </div>
     </div>
     <div class="field-row">
@@ -839,6 +856,9 @@ const afCitySelect = document.getElementById("afCitySelect");
 const afCityNew = document.getElementById("afCityNew");
 const beerList = document.getElementById("beerList");
 const pinHint = document.getElementById("pinHint");
+const afGeoBtn = document.getElementById("afGeoBtn");
+const afGeoResults = document.getElementById("afGeoResults");
+const GEO_BTN_LABEL = "🔍 Caută adresa pe hartă";
 
 let pickingLocation = false;
 let pinMarker = null;
@@ -857,19 +877,27 @@ afCitySelect.addEventListener("change", ()=>{
 
 function setPinStatus(lat,lng){
   afPinStatus.textContent = `${(+lat).toFixed(4)}, ${(+lng).toFixed(4)}`;
+  afPinStatus.classList.remove("err");
   afPinStatus.classList.add("set");
+}
+function placePin(lat,lng){
+  if(pinMarker) map.removeLayer(pinMarker);
+  pinMarker = L.marker([lat,lng]).addTo(map);
+  afLat.value = (+lat).toFixed(5);
+  afLng.value = (+lng).toFixed(5);
+  setPinStatus(lat,lng);
 }
 function stopPicking(){
   pickingLocation = false;
   afPinBtn.classList.remove("picking");
-  afPinBtn.textContent = "📍 Pune pin";
+  afPinBtn.textContent = "📍 pune pinul manual pe hartă";
   addPanel.classList.remove("picking");
   pinHint.classList.remove("show");
 }
 afPinBtn.addEventListener("click", ()=>{
   pickingLocation = !pickingLocation;
   afPinBtn.classList.toggle("picking", pickingLocation);
-  afPinBtn.textContent = pickingLocation ? "📍 Dă click pe hartă…" : "📍 Pune pin";
+  afPinBtn.textContent = pickingLocation ? "📍 dă click pe hartă…" : "📍 pune pinul manual pe hartă";
   // Collapse the panel out of the way so the map underneath is visible
   // and tappable — otherwise there's nothing to click on mobile.
   addPanel.classList.toggle("picking", pickingLocation);
@@ -877,17 +905,70 @@ afPinBtn.addEventListener("click", ()=>{
 });
 map.on("click", (e)=>{
   if(!pickingLocation) return;
-  const {lat,lng} = e.latlng;
-  afLat.value = lat.toFixed(5);
-  afLng.value = lng.toFixed(5);
-  setPinStatus(lat,lng);
-  if(pinMarker) map.removeLayer(pinMarker);
-  pinMarker = L.marker([lat,lng]).addTo(map);
+  placePin(e.latlng.lat, e.latlng.lng);
+  afGeoResults.innerHTML = "";
   stopPicking();
 });
 [afLat, afLng].forEach(inp=>inp.addEventListener("input", ()=>{
   if(afLat.value!=="" && afLng.value!=="") setPinStatus(afLat.value, afLng.value);
 }));
+
+// ---------------- Address search (OpenStreetMap Nominatim) ----------------
+// Public geocoding endpoint, no API key. Usage policy: max ~1 req/s, and
+// results must credit OpenStreetMap contributors (shown under the list).
+// https://nominatim.org/release-docs/latest/api/Search/
+async function geocodeAddress(){
+  const address = document.getElementById("afAddress").value.trim();
+  const neighborhood = document.getElementById("afNeighborhood").value.trim();
+  const city = afCitySelect.value === "__new__" ? afCityNew.value.trim() : afCitySelect.value;
+  const parts = [address, neighborhood, city, "România"].filter(Boolean);
+
+  if(parts.length < 2){
+    afPinStatus.textContent = "Completează adresa și orașul mai întâi";
+    afPinStatus.classList.remove("set");
+    afPinStatus.classList.add("err");
+    return;
+  }
+
+  afGeoBtn.classList.add("loading");
+  afGeoBtn.textContent = "🔍 Se caută…";
+  afGeoResults.innerHTML = "";
+  afPinStatus.classList.remove("err");
+
+  try{
+    const url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=ro&q=" + encodeURIComponent(parts.join(", "));
+    const res = await fetch(url, { headers: { "Accept-Language": "ro" } });
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    renderGeoResults(await res.json());
+  }catch(err){
+    console.warn("Geocodare eșuată:", err);
+    afPinStatus.textContent = "Căutarea a eșuat — pune pinul manual mai jos";
+    afPinStatus.classList.add("err");
+  }finally{
+    afGeoBtn.classList.remove("loading");
+    afGeoBtn.textContent = GEO_BTN_LABEL;
+  }
+}
+afGeoBtn.addEventListener("click", geocodeAddress);
+
+function renderGeoResults(results){
+  if(!results || !results.length){
+    afGeoResults.innerHTML = `<div class="geo-results"><div class="geo-result" style="cursor:default;opacity:.6">Nicio potrivire — încearcă pinul manual mai jos.</div></div>`;
+    return;
+  }
+  afGeoResults.innerHTML = `<div class="geo-results">` +
+    results.map((r,i)=>`<button type="button" class="geo-result" data-i="${i}">${r.display_name}</button>`).join("") +
+    `<div class="geo-attrib">© OpenStreetMap contributors</div></div>`;
+  afGeoResults.querySelectorAll(".geo-result").forEach(btn=>{
+    if(btn.dataset.i === undefined) return;
+    btn.addEventListener("click", ()=>{
+      const r = results[+btn.dataset.i];
+      placePin(+r.lat, +r.lon);
+      map.setView([+r.lat, +r.lon], Math.max(map.getZoom(), CITY_ZOOM));
+      afGeoResults.innerHTML = "";
+    });
+  });
+}
 
 function beerBlockHtml(){
   return `<div class="beer-block">
@@ -932,7 +1013,10 @@ function resetAddForm(){
   addForm.reset();
   afCityNew.style.display = "none";
   afPinStatus.textContent = "nesetat";
-  afPinStatus.classList.remove("set");
+  afPinStatus.classList.remove("set","err");
+  afGeoResults.innerHTML = "";
+  afGeoBtn.classList.remove("loading");
+  afGeoBtn.textContent = GEO_BTN_LABEL;
   if(pinMarker){ map.removeLayer(pinMarker); pinMarker = null; }
   stopPicking();
   resetBeerRows();
