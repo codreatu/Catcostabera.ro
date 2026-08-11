@@ -197,11 +197,85 @@
   }
   .leaflet-control-attribution{background:rgba(27,18,7,.7)!important;color:#a99!important;font-size:9px!important}
   .leaflet-control-attribution a{color:#c9a!important}
-  @media (prefers-reduced-motion: reduce){.drawer,.detail,.cap,.citycap{transition:none}}
+
+  /* ---------- Add-a-bar ---------- */
+  .add-btn{
+    position:fixed;z-index:1001;left:50%;transform:translateX(-50%);bottom:66px;
+    background:var(--lager);border:none;color:var(--stout);
+    font-family:'Archivo';font-size:13px;font-weight:700;
+    padding:10px 18px;border-radius:99px;cursor:pointer;
+    box-shadow:0 4px 14px rgba(0,0,0,.5);
+  }
+  .add-panel{
+    position:fixed;left:0;right:0;bottom:0;z-index:1003;
+    background:var(--stout);border-top:2px solid var(--lager);
+    border-radius:18px 18px 0 0;
+    transform:translateY(105%);transition:transform .25s ease;
+    max-height:88vh;overflow-y:auto;
+    padding:18px 18px calc(18px + env(safe-area-inset-bottom));
+  }
+  .add-panel.open{transform:translateY(0)}
+  .add-panel.picking{transform:translateY(105%)}
+  .pin-hint{
+    position:fixed;z-index:1004;top:calc(14px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);
+    background:var(--lager);color:var(--stout);font-family:'Archivo';font-size:13px;font-weight:700;
+    padding:9px 16px;border-radius:99px;box-shadow:0 4px 14px rgba(0,0,0,.5);
+    display:none;white-space:nowrap;
+  }
+  .pin-hint.show{display:block}
+  .add-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:14px}
+  .add-top h2{font-family:'Archivo Black';font-size:19px}
+  .field{margin-top:14px}
+  .field label{display:block;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;opacity:.65;margin-bottom:6px}
+  .field-row{display:flex;gap:10px}
+  .field-row .field{flex:1;margin-top:0}
+  .add-panel input[type="text"],.add-panel input[type="number"],.add-panel select{
+    width:100%;background:var(--stout-2);border:1px solid var(--line);color:var(--foam);
+    font-family:'Archivo';font-size:15px;padding:11px 14px;border-radius:12px;
+  }
+  .add-panel input::placeholder{color:rgba(251,243,228,.35)}
+  .add-panel select{appearance:none;-webkit-appearance:none}
+  .pin-row{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    background:var(--stout-2);border:1px solid var(--line);border-radius:12px;padding:6px;
+  }
+  .pin-btn{
+    display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--foam);
+    font-family:'Archivo';font-size:14px;font-weight:700;padding:9px 12px;border-radius:9px;cursor:pointer;
+  }
+  .pin-btn.picking{background:var(--lager);color:var(--stout)}
+  .pin-status{font-size:12px;opacity:.6;padding-right:8px}
+  .pin-status.set{opacity:1;color:var(--cheap)}
+  .beer-block{
+    margin-top:10px;border:1px dashed var(--line);border-radius:12px;padding:12px;position:relative;
+  }
+  .beer-block .field-row{margin-top:10px}
+  .beer-block .field-row:first-child{margin-top:0}
+  .beer-remove{
+    position:absolute;top:8px;right:8px;background:none;border:none;color:var(--foam);
+    opacity:.5;font-size:14px;cursor:pointer;padding:4px;
+  }
+  .add-beer-btn{
+    margin-top:10px;width:100%;background:none;border:1px dashed var(--line);color:var(--foam);
+    font-family:'Archivo';font-size:13px;font-weight:600;padding:10px;border-radius:12px;cursor:pointer;opacity:.85;
+  }
+  .submit-btn{
+    margin-top:18px;width:100%;background:var(--lager);border:none;color:var(--stout);
+    font-family:'Archivo';font-size:15px;font-weight:700;padding:14px;border-radius:12px;cursor:pointer;
+  }
+  .submit-btn:disabled{opacity:.5;cursor:default}
+  .form-msg{margin-top:12px;font-size:13px;padding:10px 12px;border-radius:10px;display:none}
+  .form-msg.show{display:block}
+  .form-msg.ok{background:rgba(95,174,74,.16);border:1px solid rgba(95,174,74,.5);color:#a5d194}
+  .form-msg.err{background:rgba(214,80,63,.16);border:1px solid rgba(214,80,63,.5);color:#e08a80}
+
+  @media (prefers-reduced-motion: reduce){.drawer,.detail,.add-panel,.cap,.citycap{transition:none}}
   @media(min-width:760px){
-    .drawer,.detail{left:auto;right:16px;width:400px;border-radius:14px}
+    .drawer,.detail,.add-panel{left:auto;right:16px;width:400px;border-radius:14px}
     .drawer{bottom:16px}
     .detail{bottom:16px;border:1px solid var(--line);border-top:2px solid var(--lager)}
+    .add-panel{bottom:16px;border:1px solid var(--line);border-top:2px solid var(--lager)}
+    .add-btn{left:auto;right:16px;bottom:66px;transform:none}
   }
 </style>
 </head>
@@ -230,6 +304,8 @@
 
 <div class="demo-badge" id="dataBadge">Se încarcă prețurile…</div>
 <button class="country-btn" id="btnCountry">🇷🇴 Toată România</button>
+<button class="add-btn" id="btnAdd">+ Adaugă</button>
+<div class="pin-hint" id="pinHint">📍 Atinge harta pentru a pune pinul</div>
 
 <section class="drawer" id="drawer">
   <button class="drawer-handle" id="drawerToggle" aria-expanded="false">
@@ -240,6 +316,80 @@
 </section>
 
 <section class="detail" id="detail" aria-live="polite"></section>
+
+<section class="add-panel" id="addPanel" aria-live="polite">
+  <div class="add-top">
+    <h2>Adaugă un bar</h2>
+    <button class="iconbtn" id="addClose" aria-label="Închide">✕</button>
+  </div>
+
+  <form id="addForm">
+    <div class="field">
+      <label for="afName">Numele barului</label>
+      <input type="text" id="afName" placeholder="ex. Berăria Lipscani" required>
+    </div>
+    <div class="field">
+      <label for="afAddress">Adresa</label>
+      <input type="text" id="afAddress" placeholder="ex. Str. Lipscani 41">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="afCitySelect">Oraș</label>
+        <select id="afCitySelect">
+          <option value="">— alege —</option>
+          <option value="__new__">+ Oraș nou</option>
+        </select>
+        <input type="text" id="afCityNew" placeholder="Nume oraș nou" style="margin-top:8px;display:none">
+      </div>
+      <div class="field">
+        <label for="afNeighborhood">Cartier</label>
+        <input type="text" id="afNeighborhood" placeholder="ex. Centrul Vechi">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Locație pe hartă</label>
+      <div class="pin-row">
+        <button type="button" class="pin-btn" id="afPinBtn">📍 Pune pin</button>
+        <span class="pin-status" id="afPinStatus">nesetat</span>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="afLat">Lat</label>
+        <input type="number" id="afLat" step="any" placeholder="ex. 44.4318">
+      </div>
+      <div class="field">
+        <label for="afLng">Lng</label>
+        <input type="number" id="afLng" step="any" placeholder="ex. 26.1005">
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="afOpen">Deschide (oră)</label>
+        <input type="number" id="afOpen" min="0" max="23" step="1" placeholder="ex. 12">
+      </div>
+      <div class="field">
+        <label for="afClose">Închide (oră)</label>
+        <input type="number" id="afClose" min="0" max="23" step="1" placeholder="ex. 2">
+      </div>
+    </div>
+
+    <div class="field" style="margin-top:20px">
+      <label>Ce bere?</label>
+      <div id="beerList"></div>
+      <datalist id="volList">
+        <option value="0.3l"><option value="0.33l"><option value="0.4l">
+        <option value="0.5l"><option value="0.75l"><option value="1l">
+      </datalist>
+      <button type="button" class="add-beer-btn" id="addBeerBtn">+ Adaugă altă bere</button>
+    </div>
+
+    <button type="submit" class="submit-btn" id="afSubmit">Trimite barul</button>
+    <div class="form-msg" id="afMsg"></div>
+  </form>
+</section>
 
 <script>
 // ---------------- Live data (Google Sheet) ----------------
@@ -667,10 +817,226 @@ function openDetail(b){
     </div>
     <div class="d-tags">${b.tags.map(t=>`<span>${t}</span>`).join("")}</div>
     <div class="d-note">Prețuri actualizate de comunitate · MVP cu date demonstrative</div>`;
+  addPanel.classList.remove("open");
   detail.classList.add("open");
   document.getElementById("dClose").addEventListener("click",()=>detail.classList.remove("open"));
 }
 map.on("click",()=>detail.classList.remove("open"));
+
+// ---------------- Add a bar ----------------
+// Paste the /exec URL from your Apps Script deployment (see AddBar.gs) here.
+const ADD_BAR_URL = "PASTE_APPS_SCRIPT_WEB_APP_URL_HERE";
+
+const addPanel = document.getElementById("addPanel");
+const addForm = document.getElementById("addForm");
+const afMsg = document.getElementById("afMsg");
+const afSubmit = document.getElementById("afSubmit");
+const afPinBtn = document.getElementById("afPinBtn");
+const afPinStatus = document.getElementById("afPinStatus");
+const afLat = document.getElementById("afLat");
+const afLng = document.getElementById("afLng");
+const afCitySelect = document.getElementById("afCitySelect");
+const afCityNew = document.getElementById("afCityNew");
+const beerList = document.getElementById("beerList");
+const pinHint = document.getElementById("pinHint");
+
+let pickingLocation = false;
+let pinMarker = null;
+
+function populateCityOptions(){
+  const keep = afCitySelect.value;
+  const names = CITIES.map(c=>c.n).sort((a,b)=>a.localeCompare(b,"ro"));
+  afCitySelect.innerHTML = `<option value="">— alege —</option>` +
+    names.map(n=>`<option value="${n}">${n}</option>`).join("") +
+    `<option value="__new__">+ Oraș nou</option>`;
+  if(names.includes(keep)) afCitySelect.value = keep;
+}
+afCitySelect.addEventListener("change", ()=>{
+  afCityNew.style.display = afCitySelect.value === "__new__" ? "block" : "none";
+});
+
+function setPinStatus(lat,lng){
+  afPinStatus.textContent = `${(+lat).toFixed(4)}, ${(+lng).toFixed(4)}`;
+  afPinStatus.classList.add("set");
+}
+function stopPicking(){
+  pickingLocation = false;
+  afPinBtn.classList.remove("picking");
+  afPinBtn.textContent = "📍 Pune pin";
+  addPanel.classList.remove("picking");
+  pinHint.classList.remove("show");
+}
+afPinBtn.addEventListener("click", ()=>{
+  pickingLocation = !pickingLocation;
+  afPinBtn.classList.toggle("picking", pickingLocation);
+  afPinBtn.textContent = pickingLocation ? "📍 Dă click pe hartă…" : "📍 Pune pin";
+  // Collapse the panel out of the way so the map underneath is visible
+  // and tappable — otherwise there's nothing to click on mobile.
+  addPanel.classList.toggle("picking", pickingLocation);
+  pinHint.classList.toggle("show", pickingLocation);
+});
+map.on("click", (e)=>{
+  if(!pickingLocation) return;
+  const {lat,lng} = e.latlng;
+  afLat.value = lat.toFixed(5);
+  afLng.value = lng.toFixed(5);
+  setPinStatus(lat,lng);
+  if(pinMarker) map.removeLayer(pinMarker);
+  pinMarker = L.marker([lat,lng]).addTo(map);
+  stopPicking();
+});
+[afLat, afLng].forEach(inp=>inp.addEventListener("input", ()=>{
+  if(afLat.value!=="" && afLng.value!=="") setPinStatus(afLat.value, afLng.value);
+}));
+
+function beerBlockHtml(){
+  return `<div class="beer-block">
+    <button type="button" class="beer-remove" aria-label="Șterge berea">✕</button>
+    <div class="field-row">
+      <div class="field"><label>Nume</label><input type="text" class="bfName" placeholder="ex. Ursus draft"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Preț (lei)</label><input type="number" class="bfPrice" min="0" step="0.5" placeholder="10"></div>
+      <div class="field"><label>Volum</label><input type="text" class="bfVolume" list="volList" placeholder="0.5l"></div>
+      <div class="field"><label>Tip</label>
+        <select class="bfType">
+          <option value="">—</option>
+          <option value="Draft">Draft</option>
+          <option value="Sticlă">Sticlă</option>
+          <option value="Doză">Doză</option>
+        </select>
+      </div>
+    </div>
+  </div>`;
+}
+function addBeerRow(){
+  const wrap = document.createElement("div");
+  wrap.innerHTML = beerBlockHtml();
+  const block = wrap.firstElementChild;
+  block.querySelector(".beer-remove").addEventListener("click", ()=>{
+    if(beerList.children.length > 1) block.remove();
+  });
+  beerList.appendChild(block);
+}
+document.getElementById("addBeerBtn").addEventListener("click", addBeerRow);
+function resetBeerRows(){
+  beerList.innerHTML = "";
+  addBeerRow();
+}
+
+function showFormMsg(kind, text){
+  afMsg.textContent = text;
+  afMsg.className = "form-msg show " + kind;
+}
+function resetAddForm(){
+  addForm.reset();
+  afCityNew.style.display = "none";
+  afPinStatus.textContent = "nesetat";
+  afPinStatus.classList.remove("set");
+  if(pinMarker){ map.removeLayer(pinMarker); pinMarker = null; }
+  stopPicking();
+  resetBeerRows();
+  afMsg.className = "form-msg";
+  afMsg.textContent = "";
+  afSubmit.disabled = false;
+  afSubmit.textContent = "Trimite barul";
+}
+
+function openAddPanel(){
+  detail.classList.remove("open");
+  toggleDrawer(false);
+  populateCityOptions();
+  resetAddForm();
+  addPanel.classList.add("open");
+}
+function closeAddPanel(){
+  addPanel.classList.remove("open");
+  stopPicking();
+}
+document.getElementById("btnAdd").addEventListener("click", openAddPanel);
+document.getElementById("addClose").addEventListener("click", closeAddPanel);
+
+addForm.addEventListener("submit", async (e)=>{
+  e.preventDefault();
+
+  const name = document.getElementById("afName").value.trim();
+  const address = document.getElementById("afAddress").value.trim();
+  const neighborhood = document.getElementById("afNeighborhood").value.trim();
+  const citySel = afCitySelect.value;
+  const city = citySel === "__new__" ? afCityNew.value.trim() : citySel;
+  const openRaw = document.getElementById("afOpen").value;
+  const closeRaw = document.getElementById("afClose").value;
+  const openHour = Number(openRaw), closeHour = Number(closeRaw);
+  const lat = Number(afLat.value), lng = Number(afLng.value);
+
+  const beers = [...beerList.querySelectorAll(".beer-block")].map(block=>({
+    name: block.querySelector(".bfName").value.trim(),
+    price: block.querySelector(".bfPrice").value,
+    volume: block.querySelector(".bfVolume").value.trim(),
+    type: block.querySelector(".bfType").value,
+  })).filter(b=>b.name && b.price!=="");
+
+  if(!name || !city || afLat.value==="" || afLng.value==="" || !isFinite(lat) || !isFinite(lng)
+     || openRaw==="" || closeRaw==="" || !isFinite(openHour) || !isFinite(closeHour)){
+    showFormMsg("err", "Completează numele, orașul, locația pe hartă (pin) și programul.");
+    return;
+  }
+  if(!beers.length){
+    showFormMsg("err", "Adaugă cel puțin o bere cu nume și preț.");
+    return;
+  }
+
+  afSubmit.disabled = true;
+  afSubmit.textContent = "Se trimite…";
+  showFormMsg("", "");
+
+  if(ADD_BAR_URL.indexOf("PASTE_") === 0){
+    showFormMsg("err", "Formularul nu e conectat încă (lipsește adresa Apps Script în cod).");
+    afSubmit.disabled = false;
+    afSubmit.textContent = "Trimite barul";
+    return;
+  }
+
+  try{
+    const res = await fetch(ADD_BAR_URL, {
+      method: "POST",
+      body: JSON.stringify({ name, address, neighborhood, city, lat, lng, openHour, closeHour, beers }),
+    });
+    const result = await res.json().catch(()=>({ok:false, error:"Răspuns invalid de la server."}));
+    if(!result.ok){
+      showFormMsg("err", result.error || "Nu s-a putut trimite. Încearcă din nou.");
+      afSubmit.disabled = false;
+      afSubmit.textContent = "Trimite barul";
+      return;
+    }
+
+    // Optimistic local update — visible instantly in this tab; everyone
+    // else picks it up from the sheet on their next page load.
+    let closeH = closeHour;
+    if(closeH <= openHour) closeH += 24;
+    BARS.push({
+      c: city, n: name,
+      a: neighborhood ? (address ? address+", "+neighborhood : neighborhood) : address,
+      lat, lng, hours:[openHour, closeH], hh:null,
+      beers: beers.map(b=>[b.type ? `${b.name} (${b.type})` : b.name, Number(b.price)||0, b.volume||""]),
+      tags: [],
+    });
+    CITIES = computeCities(BARS);
+    buildCityChips();
+    markActiveCity();
+    render();
+
+    showFormMsg("ok", "Adăugat! Apare acum pe hartă pentru tine — pentru toți ceilalți, la următoarea încărcare a paginii.");
+    afSubmit.disabled = false;
+    afSubmit.textContent = "Trimite barul";
+    setTimeout(closeAddPanel, 1800);
+  }catch(err){
+    console.warn("Trimitere eșuată:", err);
+    showFormMsg("err", "Nu s-a putut trimite (conexiune sau server indisponibil). Ce ai completat a rămas în formular — încearcă din nou.");
+    afSubmit.disabled = false;
+    afSubmit.textContent = "Trimite barul";
+  }
+});
 
 // ---------------- Drawer ----------------
 const drawer = document.getElementById("drawer");
