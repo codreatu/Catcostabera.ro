@@ -85,3 +85,7 @@ function num(v) {
   const n = Number(v);
   return isFinite(n) && v !== "" && v !== null && v !== undefined ? n : "";
 }
+function jsonOut(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
