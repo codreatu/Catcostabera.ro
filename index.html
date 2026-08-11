@@ -102,7 +102,6 @@
   .chip.on{background:var(--lager);color:var(--stout);border-color:var(--lager)}
   .chip.city.on{background:var(--foam);border-color:var(--foam)}
   .chip:focus-visible,.iconbtn:focus-visible,.listrow:focus-visible{outline:2px solid var(--lager);outline-offset:2px}
-  .price-chip input{accent-color:var(--amber);width:90px}
 
   /* ---------- List drawer ---------- */
   .drawer{
@@ -296,14 +295,6 @@
     </div>
   </div>
   <div class="row" id="cityRow" role="toolbar" aria-label="Orașe"></div>
-  <div class="row" role="toolbar" aria-label="Filtre">
-    <button class="chip" id="fOpen" aria-pressed="false">● Deschis acum</button>
-    <button class="chip" id="fHH" aria-pressed="false">🍺 Happy hour azi</button>
-    <label class="chip price-chip">Max <span id="pv">25</span> lei
-      <input type="range" id="fPrice" min="6" max="25" value="25" aria-label="Preț maxim">
-    </label>
-    <button class="chip" id="fCheap" aria-pressed="false">↓ Cele mai ieftine</button>
-  </div>
 </header>
 
 <div class="demo-badge" id="dataBadge">Se încarcă prețurile…</div>
@@ -684,21 +675,12 @@ L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{
 
 let markers = [];
 
-// ---------------- Filters ----------------
-const state = {open:false, hh:false, maxPrice:25, cheapSort:false, city:null};
-
-function passes(b){
-  if(state.open && !isOpen(b)) return false;
-  if(state.hh && !hasHHToday(b)) return false;
-  if(cheapest(b) > state.maxPrice) return false;
-  return true;
-}
 
 // ---------------- Render ----------------
 function render(){
   markers.forEach(m=>map.removeLayer(m)); markers=[];
   const zoom = map.getZoom();
-  const filtered = BARS.filter(passes);
+  const filtered = BARS;
   const ref = refPoint();
 
   if(zoom < ZOOM_SPLIT){
@@ -732,9 +714,7 @@ function render(){
   let listBars = zoom < ZOOM_SPLIT ? filtered
     : filtered.filter(b=>map.getBounds().pad(0.2).contains([b.lat,b.lng]));
   if(!listBars.length) listBars = filtered; // fallback so list is never empty
-  listBars = [...listBars].sort((a,b)=> state.cheapSort
-    ? cheapest(a)-cheapest(b)
-    : distKm(a.lat,a.lng,ref)-distKm(b.lat,b.lng,ref));
+  listBars = [...listBars].sort((a,b)=> distKm(a.lat,a.lng,ref)-distKm(b.lat,b.lng,ref));
 
   document.getElementById("statCount").textContent =
     `${filtered.length} baruri în ${new Set(filtered.map(b=>b.c)).size} orașe`;
@@ -1158,23 +1138,6 @@ function toggleDrawer(force){
   document.getElementById("drawerArrow").textContent = open ? "▼" : "▲";
 }
 document.getElementById("drawerToggle").addEventListener("click",()=>toggleDrawer());
-
-// ---------------- Filter wiring ----------------
-function wireChip(id,key){
-  const el=document.getElementById(id);
-  el.addEventListener("click",()=>{
-    state[key]=!state[key];
-    el.classList.toggle("on",state[key]);
-    el.setAttribute("aria-pressed",state[key]);
-    render();
-  });
-}
-wireChip("fOpen","open"); wireChip("fHH","hh"); wireChip("fCheap","cheapSort");
-document.getElementById("fPrice").addEventListener("input",e=>{
-  state.maxPrice=+e.target.value;
-  document.getElementById("pv").textContent=e.target.value;
-  render();
-});
 
 // Re-render on navigation (debounced)
 let t=null;
