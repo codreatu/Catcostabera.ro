@@ -934,7 +934,7 @@ async function geocodeAddress(query){
   afGeoResults.innerHTML = `<div class="geo-results"><div class="geo-result" style="cursor:default;opacity:.5">Se caută…</div></div>`;
 
   try{
-    const url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=ro&q=" + encodeURIComponent(parts.join(", "));
+    const url = "https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&countrycodes=ro&q=" + encodeURIComponent(parts.join(", "));
     const res = await fetch(url, { headers: { "Accept-Language": "ro" }, signal: geoAbortController.signal });
     if(!res.ok) throw new Error("HTTP " + res.status);
     renderGeoResults(await res.json());
@@ -965,8 +965,37 @@ function renderGeoResults(results){
       placePin(+r.lat, +r.lon);
       map.setView([+r.lat, +r.lon], Math.max(map.getZoom(), CITY_ZOOM));
       afGeoResults.innerHTML = "";
+      autofillFromResult(r);
     });
   });
+}
+
+// Nominatim sometimes returns a POI name (if the place is already mapped
+// in OpenStreetMap, e.g. an existing pub) plus a structured address
+// breakdown (neighbourhood, city). Use whatever's there to save retyping
+// — but only into fields the person hasn't already filled in themselves,
+// never overwriting what they typed.
+function autofillFromResult(r){
+  const addr = r.address || {};
+  const afName = document.getElementById("afName");
+  if(!afName.value.trim() && r.name) afName.value = r.name;
+
+  const neighborhood = addr.suburb || addr.neighbourhood || addr.city_district || addr.quarter || "";
+  const afNeighborhood = document.getElementById("afNeighborhood");
+  if(!afNeighborhood.value.trim() && neighborhood) afNeighborhood.value = neighborhood;
+
+  const cityGuess = addr.city || addr.town || addr.municipality || addr.village || "";
+  if(cityGuess && !afCitySelect.value){
+    const match = [...afCitySelect.options].find(o=>o.value && o.value.toLowerCase() === cityGuess.toLowerCase());
+    if(match){
+      afCitySelect.value = match.value;
+      afCityNew.style.display = "none";
+    } else {
+      afCitySelect.value = "__new__";
+      afCityNew.style.display = "block";
+      afCityNew.value = cityGuess;
+    }
+  }
 }
 
 function beerBlockHtml(){
