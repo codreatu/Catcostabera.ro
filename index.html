@@ -235,21 +235,12 @@
   }
   .add-panel input::placeholder{color:rgba(251,243,228,.35)}
   .add-panel select{appearance:none;-webkit-appearance:none}
-  .pin-row{
-    display:flex;align-items:center;justify-content:space-between;gap:10px;
-    background:var(--stout-2);border:1px solid var(--line);border-radius:12px;padding:6px;
-  }
-  .pin-btn{
-    display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--foam);
-    font-family:'Archivo';font-size:14px;font-weight:700;padding:9px 12px;border-radius:9px;cursor:pointer;
-  }
-  .pin-btn.picking{background:var(--lager);color:var(--stout)}
-  .pin-btn.loading{opacity:.6;pointer-events:none}
-  .pin-status{font-size:12px;opacity:.6;padding-right:8px;text-align:right}
+  #afGeoQuery.loading{opacity:.6}
+  .geo-status-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px}
+  .pin-status{font-size:12px;opacity:.6}
   .pin-status.set{opacity:1;color:var(--cheap)}
   .pin-status.err{opacity:1;color:var(--pricey)}
-  .geo-fallback{font-size:11.5px;opacity:.55;margin-top:6px;text-align:right}
-  .pin-link{background:none;border:none;color:var(--foam);text-decoration:underline;font-family:'Archivo';font-size:11.5px;cursor:pointer;padding:0}
+  .pin-link{background:none;border:none;color:var(--foam);text-decoration:underline;font-family:'Archivo';font-size:11.5px;cursor:pointer;padding:0;white-space:nowrap}
   .pin-link.picking{color:var(--lager);font-weight:700}
   .geo-results{margin-top:8px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
   .geo-result{
@@ -357,14 +348,12 @@
     </div>
 
     <div class="field">
-      <label>Locație pe hartă</label>
-      <div class="pin-row">
-        <button type="button" class="pin-btn" id="afGeoBtn">🔍 Caută adresa pe hartă</button>
-        <span class="pin-status" id="afPinStatus">nesetat</span>
-      </div>
+      <label for="afGeoQuery">Locație pe hartă</label>
+      <input type="text" id="afGeoQuery" placeholder="Scrie adresa… ex. Str. Lipscani 41" autocomplete="off">
       <div id="afGeoResults"></div>
-      <div class="geo-fallback">
-        sau <button type="button" class="pin-link" id="afPinBtn">📍 pune pinul manual pe hartă</button>
+      <div class="geo-status-row">
+        <span class="pin-status" id="afPinStatus">nesetat</span>
+        <button type="button" class="pin-link" id="afPinBtn">📍 pune pinul manual</button>
       </div>
     </div>
     <div class="field-row">
@@ -852,12 +841,13 @@ const afCitySelect = document.getElementById("afCitySelect");
 const afCityNew = document.getElementById("afCityNew");
 const beerList = document.getElementById("beerList");
 const pinHint = document.getElementById("pinHint");
-const afGeoBtn = document.getElementById("afGeoBtn");
+const afGeoQuery = document.getElementById("afGeoQuery");
 const afGeoResults = document.getElementById("afGeoResults");
-const GEO_BTN_LABEL = "🔍 Caută adresa pe hartă";
 
 let pickingLocation = false;
 let pinMarker = null;
+let geoDebounceTimer = null;
+let geoAbortController = null;
 
 function populateCityOptions(){
   const keep = afCitySelect.value;
@@ -913,42 +903,55 @@ map.on("click", (e)=>{
 // Public geocoding endpoint, no API key. Usage policy: max ~1 req/s, and
 // results must credit OpenStreetMap contributors (shown under the list).
 // https://nominatim.org/release-docs/latest/api/Search/
-async function geocodeAddress(){
-  const neighborhood = document.getElementById("afNeighborhood").value.trim();
-  const city = afCitySelect.value === "__new__" ? afCityNew.value.trim() : afCitySelect.value;
-  const parts = [neighborhood, city, "România"].filter(Boolean);
-
-  if(!city){
-    afPinStatus.textContent = "Alege orașul mai întâi";
-    afPinStatus.classList.remove("set");
-    afPinStatus.classList.add("err");
+afGeoQuery.addEventListener("input", ()=>{
+  clearTimeout(geoDebounceTimer);
+  afPinStatus.classList.remove("err");
+  const q = afGeoQuery.value.trim();
+  if(q.length < 3){
+    afGeoResults.innerHTML = "";
     return;
   }
+  geoDebounceTimer = setTimeout(()=>geocodeAddress(q), 500);
+});
+afGeoQuery.addEventListener("keydown", (e)=>{
+  // Enter would otherwise submit the whole form early — use it to search now instead.
+  if(e.key === "Enter"){
+    e.preventDefault();
+    clearTimeout(geoDebounceTimer);
+    const q = afGeoQuery.value.trim();
+    if(q.length >= 3) geocodeAddress(q);
+  }
+});
 
-  afGeoBtn.classList.add("loading");
-  afGeoBtn.textContent = "🔍 Se caută…";
-  afGeoResults.innerHTML = "";
-  afPinStatus.classList.remove("err");
+async function geocodeAddress(query){
+  const city = afCitySelect.value === "__new__" ? afCityNew.value.trim() : afCitySelect.value;
+  const parts = [query, city, "România"].filter(Boolean);
+
+  if(geoAbortController) geoAbortController.abort();
+  geoAbortController = new AbortController();
+
+  afGeoQuery.classList.add("loading");
+  afGeoResults.innerHTML = `<div class="geo-results"><div class="geo-result" style="cursor:default;opacity:.5">Se caută…</div></div>`;
 
   try{
     const url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=ro&q=" + encodeURIComponent(parts.join(", "));
-    const res = await fetch(url, { headers: { "Accept-Language": "ro" } });
+    const res = await fetch(url, { headers: { "Accept-Language": "ro" }, signal: geoAbortController.signal });
     if(!res.ok) throw new Error("HTTP " + res.status);
     renderGeoResults(await res.json());
   }catch(err){
+    if(err.name === "AbortError") return; // superseded by a newer keystroke
     console.warn("Geocodare eșuată:", err);
-    afPinStatus.textContent = "Căutarea a eșuat — pune pinul manual mai jos";
+    afGeoResults.innerHTML = "";
+    afPinStatus.textContent = "Căutarea a eșuat — încearcă din nou sau pune pinul manual";
     afPinStatus.classList.add("err");
   }finally{
-    afGeoBtn.classList.remove("loading");
-    afGeoBtn.textContent = GEO_BTN_LABEL;
+    afGeoQuery.classList.remove("loading");
   }
 }
-afGeoBtn.addEventListener("click", geocodeAddress);
 
 function renderGeoResults(results){
   if(!results || !results.length){
-    afGeoResults.innerHTML = `<div class="geo-results"><div class="geo-result" style="cursor:default;opacity:.6">Nicio potrivire — încearcă pinul manual mai jos.</div></div>`;
+    afGeoResults.innerHTML = `<div class="geo-results"><div class="geo-result" style="cursor:default;opacity:.6">Nicio potrivire — încearcă alt text sau pune pinul manual.</div></div>`;
     return;
   }
   afGeoResults.innerHTML = `<div class="geo-results">` +
@@ -958,6 +961,7 @@ function renderGeoResults(results){
     if(btn.dataset.i === undefined) return;
     btn.addEventListener("click", ()=>{
       const r = results[+btn.dataset.i];
+      afGeoQuery.value = r.display_name; // pastes the picked match into the field
       placePin(+r.lat, +r.lon);
       map.setView([+r.lat, +r.lon], Math.max(map.getZoom(), CITY_ZOOM));
       afGeoResults.innerHTML = "";
@@ -1009,9 +1013,10 @@ function resetAddForm(){
   afCityNew.style.display = "none";
   afPinStatus.textContent = "nesetat";
   afPinStatus.classList.remove("set","err");
+  clearTimeout(geoDebounceTimer);
+  if(geoAbortController) geoAbortController.abort();
   afGeoResults.innerHTML = "";
-  afGeoBtn.classList.remove("loading");
-  afGeoBtn.textContent = GEO_BTN_LABEL;
+  afGeoQuery.classList.remove("loading");
   if(pinMarker){ map.removeLayer(pinMarker); pinMarker = null; }
   stopPicking();
   resetBeerRows();
