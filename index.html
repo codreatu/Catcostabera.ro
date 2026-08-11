@@ -341,10 +341,6 @@
       <label for="afName">Numele barului</label>
       <input type="text" id="afName" placeholder="ex. Berăria Lipscani" required>
     </div>
-    <div class="field">
-      <label for="afAddress">Adresa</label>
-      <input type="text" id="afAddress" placeholder="ex. Str. Lipscani 41">
-    </div>
     <div class="field-row">
       <div class="field">
         <label for="afCitySelect">Oraș</label>
@@ -918,13 +914,12 @@ map.on("click", (e)=>{
 // results must credit OpenStreetMap contributors (shown under the list).
 // https://nominatim.org/release-docs/latest/api/Search/
 async function geocodeAddress(){
-  const address = document.getElementById("afAddress").value.trim();
   const neighborhood = document.getElementById("afNeighborhood").value.trim();
   const city = afCitySelect.value === "__new__" ? afCityNew.value.trim() : afCitySelect.value;
-  const parts = [address, neighborhood, city, "România"].filter(Boolean);
+  const parts = [neighborhood, city, "România"].filter(Boolean);
 
-  if(parts.length < 2){
-    afPinStatus.textContent = "Completează adresa și orașul mai întâi";
+  if(!city){
+    afPinStatus.textContent = "Alege orașul mai întâi";
     afPinStatus.classList.remove("set");
     afPinStatus.classList.add("err");
     return;
@@ -1044,7 +1039,6 @@ addForm.addEventListener("submit", async (e)=>{
   e.preventDefault();
 
   const name = document.getElementById("afName").value.trim();
-  const address = document.getElementById("afAddress").value.trim();
   const neighborhood = document.getElementById("afNeighborhood").value.trim();
   const citySel = afCitySelect.value;
   const city = citySel === "__new__" ? afCityNew.value.trim() : citySel;
@@ -1084,7 +1078,7 @@ addForm.addEventListener("submit", async (e)=>{
   try{
     const res = await fetch(ADD_BAR_URL, {
       method: "POST",
-      body: JSON.stringify({ name, address, neighborhood, city, lat, lng, openHour, closeHour, beers }),
+      body: JSON.stringify({ name, neighborhood, city, lat, lng, openHour, closeHour, beers }),
     });
     const result = await res.json().catch(()=>({ok:false, error:"Răspuns invalid de la server."}));
     if(!result.ok){
@@ -1099,8 +1093,7 @@ addForm.addEventListener("submit", async (e)=>{
     let closeH = closeHour;
     if(closeH <= openHour) closeH += 24;
     BARS.push({
-      c: city, n: name,
-      a: neighborhood ? (address ? address+", "+neighborhood : neighborhood) : address,
+      c: city, n: name, a: neighborhood,
       lat, lng, hours:[openHour, closeH], hh:null,
       beers: beers.map(b=>[b.type ? `${b.name} (${b.type})` : b.name, Number(b.price)||0, b.volume||""]),
       tags: [],
