@@ -1090,17 +1090,17 @@ addForm.addEventListener("submit", async (e)=>{
   }
 
   try{
-    const res = await fetch(ADD_BAR_URL, {
+    // Apps Script's response to a cross-origin POST can't reliably be read
+    // back by the browser (a redirect/CORS quirk on Google's end) even
+    // though the request itself reaches doPost() and succeeds — so this
+    // is sent fire-and-forget. Required fields are already checked above;
+    // anything the script alone would reject (e.g. a missing sheet tab)
+    // won't be reported back here.
+    await fetch(ADD_BAR_URL, {
       method: "POST",
+      mode: "no-cors",
       body: JSON.stringify({ name, neighborhood, city, lat, lng, openHour, closeHour, beers }),
     });
-    const result = await res.json().catch(()=>({ok:false, error:"Răspuns invalid de la server."}));
-    if(!result.ok){
-      showFormMsg("err", result.error || "Nu s-a putut trimite. Încearcă din nou.");
-      afSubmit.disabled = false;
-      afSubmit.textContent = "Trimite barul";
-      return;
-    }
 
     // Optimistic local update — visible instantly in this tab; everyone
     // else picks it up from the sheet on their next page load.
