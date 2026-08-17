@@ -36,12 +36,19 @@ empty (File > Import > Upload, "Insert new sheet(s)").
    standalone), replace the default content with `Code.gs`, save. It's
    already pointed at this sheet ID and gid, so no further edits needed.
 4. **Deploy**: Deploy > New deployment > type "Web app" → Execute as **Me**,
-   who has access **Anyone**. Copy the `/exec` URL.
+   who has access **Anyone** *(not "Anyone with Google account" — must be
+   the public "Anyone" option, or anonymous visitor submissions get
+   silently redirected to a Google sign-in page instead of writing to the
+   sheet)*. Copy the `/exec` URL.
 5. Paste that URL into `ADD_BAR_URL` near the top of `bier-in-hd.html`
    (`SHEET_ID`/`SHEET_GID` there are already set).
 
 Once `ADD_BAR_URL` is filled in, the page reads bars live from the sheet,
 and the "+ Hinzufügen" form writes new submissions straight back into it.
+`Code.gs` validates required fields, rejects a pin dropped outside
+Heidelberg, and escapes anything that looks like a spreadsheet formula
+before writing it — malformed or empty submissions come back as
+`{"ok":false,"error":"..."}` instead of a blank row.
 
 ## Price color rule (matches the map markers)
 
