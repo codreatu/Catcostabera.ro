@@ -72,9 +72,9 @@
     -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
     -webkit-mask-position:center;mask-position:center;
   }
-  h1{font-family:'Archivo Black',sans-serif;font-size:19px;letter-spacing:.2px}
+  h1{font-family:'Comic Sans MS','Comic Sans',cursive,sans-serif;font-size:19px;letter-spacing:.2px}
   h1 span{color:var(--lager)}
-  .sub{font-size:11px;opacity:.75;margin-top:1px}
+  .sub{font-family:'Comic Sans MS','Comic Sans',cursive,sans-serif;font-size:11px;opacity:.75;margin-top:1px}
   .chip:focus-visible,.iconbtn:focus-visible,.listrow:focus-visible{outline:2px solid var(--lager);outline-offset:2px}
 
   /* ---------- List drawer ---------- */
@@ -256,7 +256,7 @@
     <div class="brand-cap" aria-hidden="true"></div>
     <div>
       <h1>Bier in <span>HD</span></h1>
-      <div class="sub">Bierpreise in <b>Heidelberg</b> · <span id="statCount"></span></div>
+      <div class="sub">Fassbierpreise in <b>Heidelberg</b> · <span id="statCount"></span></div>
     </div>
   </div>
 </header>
@@ -756,14 +756,6 @@ function beerBlockHtml(){
     <div class="field-row">
       <div class="field"><label>Preis (€)</label><input type="number" class="bfPrice" min="0" step="0.1" placeholder="3.20"></div>
       <div class="field"><label>Volumen</label><input type="text" class="bfVolume" list="volList" placeholder="0.3l"></div>
-      <div class="field"><label>Art</label>
-        <select class="bfType">
-          <option value="">—</option>
-          <option value="Vom Fass">Vom Fass</option>
-          <option value="Flasche">Flasche</option>
-          <option value="Dose">Dose</option>
-        </select>
-      </div>
     </div>
   </div>`;
 }
@@ -830,7 +822,6 @@ addForm.addEventListener("submit", async (e)=>{
     name: block.querySelector(".bfName").value.trim(),
     price: block.querySelector(".bfPrice").value,
     volume: block.querySelector(".bfVolume").value.trim(),
-    type: block.querySelector(".bfType").value,
   })).filter(b=>b.name && b.price!=="");
 
   if(!name || afLat.value==="" || afLng.value==="" || !isFinite(lat) || !isFinite(lng)
@@ -874,7 +865,7 @@ addForm.addEventListener("submit", async (e)=>{
     BARS.push({
       n: name, a: neighborhood,
       lat, lng, hours:[openHour, closeH],
-      beers: beers.map(b=>[b.type ? `${b.name} (${b.type})` : b.name, Number(b.price)||0, b.volume||""]),
+      beers: beers.map(b=>[b.name, Number(b.price)||0, b.volume||""]),
       tags: [],
     });
     render();
