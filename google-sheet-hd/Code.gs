@@ -1,0 +1,78 @@
+/**
+ * Bier in HD — Apps Script backend for the "Bars" sheet.
+ *
+ * What this does:
+ *  - doPost(e): receives the JSON a visitor submits via the "+ Hinzufügen"
+ *    form on bier-in-hd.html and appends one row to the "Bars" tab, in the
+ *    same column layout the frontend's parseSheetRow() expects:
+ *      A Name | B Stadtteil/Adresse | C Lat | D Lng | E Öffnet (Std)
+ *      F Schließt (Std) | G Biere | H Tags
+ *  - doGet(e): trivial health check, so you can confirm the deployment is
+ *    live by opening the /exec URL in a browser.
+ *
+ * Setup:
+ *  1. Open the "Bier in HD" Google Sheet (import/open Bier-in-HD-Bars.xlsx
+ *     with Google Sheets, or File > Import into an existing sheet).
+ *  2. Extensions > Apps Script, delete the placeholder Code.gs content,
+ *     paste this file in, and save.
+ *  3. Deploy > New deployment > type "Web app".
+ *       - Execute as: Me
+ *       - Who has access: Anyone
+ *  4. Copy the resulting /exec URL and paste it into ADD_BAR_URL in
+ *     bier-in-hd.html.
+ *  5. Share the sheet itself as "Anyone with the link — Viewer" so the
+ *     page can also *read* it (separate from this script, which only
+ *     handles the write side).
+ */
+
+var SHEET_TAB_NAME = "Bars";
+
+function doPost(e) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_TAB_NAME);
+    if (!sheet) throw new Error('Tab "' + SHEET_TAB_NAME + '" nicht gefunden.');
+
+    var name = (data.name || "").toString().trim();
+    var neighborhood = (data.neighborhood || "").toString().trim();
+    var lat = Number(data.lat);
+    var lng = Number(data.lng);
+    var openHour = Number(data.openHour);
+    var closeHour = Number(data.closeHour);
+    var beers = Array.isArray(data.beers) ? data.beers : [];
+
+    if (!name || !isFinite(lat) || !isFinite(lng) || !isFinite(openHour) || !isFinite(closeHour) || !beers.length) {
+      return jsonOut({ status: "error", message: "Fehlende oder ungültige Felder." });
+    }
+
+    var beersStr = beers
+      .map(function (b) {
+        var beerName = (b.name || "Bier").toString().trim();
+        if (b.type) beerName += " (" + b.type + ")";
+        var price = Number(b.price) || 0;
+        var volume = (b.volume || "").toString().trim();
+        return beerName + ":" + price + ":" + volume;
+      })
+      .join(" | ");
+
+    sheet.appendRow([name, neighborhood, lat, lng, openHour, closeHour, beersStr, ""]);
+
+    return jsonOut({ status: "ok" });
+  } catch (err) {
+    return jsonOut({ status: "error", message: err.message });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function doGet(e) {
+  return jsonOut({ status: "ok", message: "Bier in HD Apps Script läuft." });
+}
+
+function jsonOut(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
+    ContentService.MimeType.JSON
+  );
+}

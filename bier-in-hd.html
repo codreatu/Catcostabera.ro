@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+<title>Bier in HD — Bierpreise in Heidelberg</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root{
+    --stout:#1B1207;
+    --stout-2:#2A1D0E;
+    --foam:#FBF3E4;
+    --lager:#F0A31A;
+    --amber:#C56E1A;
+    --hop:#5B8A4A;
+    --line:rgba(251,243,228,.14);
+    --cheap:#5FAE4A;
+    --mid:#F0A31A;
+    --pricey:#D6503F;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{font-family:'Archivo',system-ui,sans-serif;background:var(--stout);color:var(--foam);overflow:hidden}
+  #map{position:fixed;inset:0;z-index:1;background:#12100c}
+  .leaflet-container{font-family:'Archivo',sans-serif}
+
+  /* ---------- Bottle-cap price markers ---------- */
+  .cap{
+    width:46px;height:46px;border-radius:50%;
+    background:var(--lager);color:var(--stout);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    font-weight:700;line-height:1;
+    box-shadow:0 3px 10px rgba(0,0,0,.55);
+    border:2px solid var(--stout);
+    position:relative;transition:transform .12s ease;
+  }
+  .cap::before{
+    content:"";position:absolute;inset:-5px;border-radius:50%;z-index:-1;
+    background:repeating-conic-gradient(var(--lager) 0deg 9deg, transparent 9deg 18deg);
+  }
+  .cap.cheap{background:var(--cheap)}
+  .cap.cheap::before{background:repeating-conic-gradient(var(--cheap) 0deg 9deg, transparent 9deg 18deg)}
+  .cap.mid{background:var(--mid)}
+  .cap.mid::before{background:repeating-conic-gradient(var(--mid) 0deg 9deg, transparent 9deg 18deg)}
+  .cap.pricey{background:var(--pricey)}
+  .cap.pricey::before{background:repeating-conic-gradient(var(--pricey) 0deg 9deg, transparent 9deg 18deg)}
+  .cap.closed{background:#6b6257}
+  .cap.closed::before{background:repeating-conic-gradient(#6b6257 0deg 9deg, transparent 9deg 18deg)}
+  .cap .from{font-size:6px;font-weight:600;letter-spacing:.4px;text-transform:lowercase;opacity:.85;line-height:1}
+  .cap .amt{font-size:13px;line-height:1}
+  .cap .cur{font-size:8px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;margin-top:1px}
+  .cap:hover{transform:scale(1.12)}
+  .capwrap{background:none;border:none}
+
+  /* ---------- Top bar ---------- */
+  header{
+    position:fixed;top:0;left:0;right:0;z-index:1000;
+    padding:calc(10px + env(safe-area-inset-top)) 12px 10px;
+    background:linear-gradient(to bottom, rgba(27,18,7,.96) 60%, rgba(27,18,7,0));
+    pointer-events:none;
+  }
+  .brand{display:flex;align-items:center;gap:10px;pointer-events:auto}
+  .brand-cap{
+    width:34px;height:34px;border-radius:50%;flex:none;
+    background:var(--lager);display:flex;align-items:center;justify-content:center;
+    font-family:'Archivo Black';font-size:15px;color:var(--stout);
+    box-shadow:inset 0 0 0 2px var(--stout), 0 0 0 3px var(--lager);
+  }
+  h1{font-family:'Archivo Black',sans-serif;font-size:19px;letter-spacing:.2px}
+  h1 span{color:var(--lager)}
+  .sub{font-size:11px;opacity:.75;margin-top:1px}
+  .chip:focus-visible,.iconbtn:focus-visible,.listrow:focus-visible{outline:2px solid var(--lager);outline-offset:2px}
+
+  /* ---------- List drawer ---------- */
+  .drawer{
+    position:fixed;left:0;right:0;bottom:0;z-index:1001;
+    background:var(--stout);border-top:1px solid var(--line);
+    border-radius:18px 18px 0 0;
+    transform:translateY(calc(100% - 58px));
+    transition:transform .25s ease;
+    max-height:72vh;display:flex;flex-direction:column;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .drawer.open{transform:translateY(0)}
+  .drawer-handle{
+    padding:10px 16px 12px;cursor:pointer;text-align:left;position:relative;
+    background:none;border:none;color:var(--foam);width:100%;
+    font-family:'Archivo';display:flex;align-items:center;justify-content:space-between;
+  }
+  .drawer-handle b{font-size:14px}
+  .drawer-handle .bar-count{color:var(--lager)}
+  .drawer-handle::before{
+    content:"";position:absolute;top:6px;left:50%;transform:translateX(-50%);
+    width:36px;height:4px;border-radius:99px;background:var(--line);
+  }
+  .list{overflow-y:auto;padding:0 8px 12px}
+  .listrow{
+    display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+    background:none;border:none;border-bottom:1px solid var(--line);
+    padding:12px 8px;cursor:pointer;color:var(--foam);font-family:'Archivo';
+  }
+  .listrow .mini{
+    width:44px;height:44px;border-radius:50%;flex:none;
+    background:var(--lager);color:var(--stout);font-weight:700;font-size:13px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .listrow.closed-row .mini{background:#6b6257}
+  .listrow .rn{font-weight:700;font-size:14px}
+  .listrow .rm{font-size:12px;opacity:.7;margin-top:2px}
+  .listrow .dist{margin-left:auto;font-size:12px;opacity:.75;flex:none;text-align:right}
+
+  /* ---------- Detail card ---------- */
+  .detail{
+    position:fixed;left:0;right:0;bottom:0;z-index:1002;
+    background:var(--stout);border-top:2px solid var(--lager);
+    border-radius:18px 18px 0 0;
+    transform:translateY(105%);transition:transform .25s ease;
+    max-height:78vh;overflow-y:auto;
+    padding:18px 18px calc(18px + env(safe-area-inset-bottom));
+  }
+  .detail.open{transform:translateY(0)}
+  .d-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .d-name{font-family:'Archivo Black';font-size:21px;line-height:1.15}
+  .d-meta{font-size:13px;opacity:.75;margin-top:4px}
+  .iconbtn{
+    background:var(--stout-2);border:1px solid var(--line);color:var(--foam);
+    width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;flex:none;
+  }
+  .status{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;margin-top:10px}
+  .dot{width:8px;height:8px;border-radius:50%}
+  .status.o{color:#8fc47e}.status.o .dot{background:#8fc47e}
+  .status.c{color:#e08a80}.status.c .dot{background:#e08a80}
+  .menu{margin-top:16px}
+  .menu h3{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;opacity:.6;margin-bottom:8px}
+  .beer{display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;border-bottom:1px dashed var(--line);font-size:14.5px}
+  .beer .bp{font-weight:700;color:var(--lager);font-size:15px}
+  .beer .bp.cheap{color:var(--cheap)}
+  .beer .bp.mid{color:var(--mid)}
+  .beer .bp.pricey{color:var(--pricey)}
+  .beer .bp-group{display:inline-flex;flex-wrap:wrap;justify-content:flex-end;column-gap:4px}
+  .beer .bp-sep{opacity:.4;font-weight:400;font-size:13px;align-self:center}
+  .beer .bv{opacity:.55;font-size:12px;margin-left:6px}
+  .d-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+  .d-tags span{font-size:12px;background:var(--stout-2);border:1px solid var(--line);padding:4px 10px;border-radius:99px}
+  .d-note{font-size:11px;opacity:.5;margin-top:14px}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;font-size:11px;opacity:.8}
+  .legend span{display:inline-flex;align-items:center;gap:5px}
+  .legend i{width:9px;height:9px;border-radius:50%;display:inline-block}
+  .legend .lc{background:var(--cheap)}.legend .lm{background:var(--mid)}.legend .lp{background:var(--pricey)}
+
+  .demo-badge{
+    position:fixed;z-index:999;right:10px;bottom:66px;
+    font-size:10px;letter-spacing:.6px;background:rgba(27,18,7,.85);
+    border:1px solid var(--line);padding:4px 8px;border-radius:6px;opacity:.85;
+  }
+  .leaflet-control-attribution{background:rgba(27,18,7,.7)!important;color:#a99!important;font-size:9px!important}
+  .leaflet-control-attribution a{color:#c9a!important}
+
+  /* ---------- Add-a-bar ---------- */
+  .add-btn{
+    position:fixed;z-index:1001;left:50%;transform:translateX(-50%);bottom:66px;
+    background:var(--lager);border:none;color:var(--stout);
+    font-family:'Archivo';font-size:13px;font-weight:700;
+    padding:10px 18px;border-radius:99px;cursor:pointer;
+    box-shadow:0 4px 14px rgba(0,0,0,.5);
+  }
+  .add-panel{
+    position:fixed;left:0;right:0;bottom:0;z-index:1003;
+    background:var(--stout);border-top:2px solid var(--lager);
+    border-radius:18px 18px 0 0;
+    transform:translateY(105%);transition:transform .25s ease;
+    max-height:88vh;overflow-y:auto;
+    padding:18px 18px calc(18px + env(safe-area-inset-bottom));
+  }
+  .add-panel.open{transform:translateY(0)}
+  .add-panel.picking{transform:translateY(105%)}
+  .pin-hint{
+    position:fixed;z-index:1004;top:calc(14px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);
+    background:var(--lager);color:var(--stout);font-family:'Archivo';font-size:13px;font-weight:700;
+    padding:9px 16px;border-radius:99px;box-shadow:0 4px 14px rgba(0,0,0,.5);
+    display:none;white-space:nowrap;
+  }
+  .pin-hint.show{display:block}
+  .add-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:14px}
+  .add-top h2{font-family:'Archivo Black';font-size:19px}
+  .field{margin-top:14px}
+  .field label{display:block;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;opacity:.65;margin-bottom:6px}
+  .field-row{display:flex;gap:10px}
+  .field-row .field{flex:1;margin-top:0}
+  .add-panel input[type="text"],.add-panel input[type="number"],.add-panel select{
+    width:100%;background:var(--stout-2);border:1px solid var(--line);color:var(--foam);
+    font-family:'Archivo';font-size:15px;padding:11px 14px;border-radius:12px;
+  }
+  .add-panel input::placeholder{color:rgba(251,243,228,.35)}
+  .add-panel select{appearance:none;-webkit-appearance:none}
+  #afGeoQuery.loading{opacity:.6}
+  .geo-status-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px}
+  .pin-status{font-size:12px;opacity:.6}
+  .pin-status.set{opacity:1;color:var(--cheap)}
+  .pin-status.err{opacity:1;color:var(--pricey)}
+  .pin-link{background:none;border:none;color:var(--foam);text-decoration:underline;font-family:'Archivo';font-size:11.5px;cursor:pointer;padding:0;white-space:nowrap}
+  .pin-link.picking{color:var(--lager);font-weight:700}
+  .geo-results{margin-top:8px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .geo-result{
+    display:block;width:100%;text-align:left;background:var(--stout-2);border:none;border-bottom:1px solid var(--line);
+    color:var(--foam);font-family:'Archivo';font-size:12.5px;line-height:1.4;padding:10px 12px;cursor:pointer;
+  }
+  .geo-result:last-child{border-bottom:none}
+  .geo-result:hover{background:#33240f}
+  .geo-attrib{font-size:10px;opacity:.4;text-align:right;padding:6px 12px 2px;background:var(--stout-2)}
+  .beer-block{
+    margin-top:10px;border:1px dashed var(--line);border-radius:12px;padding:12px;position:relative;
+  }
+  .beer-block .field-row{margin-top:10px}
+  .beer-block .field-row:first-child{margin-top:0}
+  .beer-remove{
+    position:absolute;top:8px;right:8px;background:none;border:none;color:var(--foam);
+    opacity:.5;font-size:14px;cursor:pointer;padding:4px;
+  }
+  .add-beer-btn{
+    margin-top:10px;width:100%;background:none;border:1px dashed var(--line);color:var(--foam);
+    font-family:'Archivo';font-size:13px;font-weight:600;padding:10px;border-radius:12px;cursor:pointer;opacity:.85;
+  }
+  .submit-btn{
+    margin-top:18px;width:100%;background:var(--lager);border:none;color:var(--stout);
+    font-family:'Archivo';font-size:15px;font-weight:700;padding:14px;border-radius:12px;cursor:pointer;
+  }
+  .submit-btn:disabled{opacity:.5;cursor:default}
+  .form-msg{margin-top:12px;font-size:13px;padding:10px 12px;border-radius:10px;display:none}
+  .form-msg.show{display:block}
+  .form-msg.ok{background:rgba(95,174,74,.16);border:1px solid rgba(95,174,74,.5);color:#a5d194}
+  .form-msg.err{background:rgba(214,80,63,.16);border:1px solid rgba(214,80,63,.5);color:#e08a80}
+
+  @media (prefers-reduced-motion: reduce){.drawer,.detail,.add-panel,.cap{transition:none}}
+  @media(min-width:760px){
+    .drawer,.detail,.add-panel{left:auto;right:16px;width:400px;border-radius:14px}
+    .drawer{bottom:16px}
+    .detail{bottom:16px;border:1px solid var(--line);border-top:2px solid var(--lager)}
+    .add-panel{bottom:16px;border:1px solid var(--line);border-top:2px solid var(--lager)}
+    .add-btn{left:auto;right:16px;bottom:66px;transform:none}
+  }
+</style>
+</head>
+<body>
+
+<div id="map" role="application" aria-label="Karte der Bars in Heidelberg"></div>
+
+<header>
+  <div class="brand">
+    <div class="brand-cap">B</div>
+    <div>
+      <h1>Bier in <span>HD</span></h1>
+      <div class="sub">Bierpreise in <b>Heidelberg</b> · <span id="statCount"></span></div>
+    </div>
+  </div>
+</header>
+
+<div class="demo-badge" id="dataBadge">Preise werden geladen…</div>
+<button class="add-btn" id="btnAdd">+ Hinzufügen</button>
+<div class="pin-hint" id="pinHint">📍 Karte antippen, um den Pin zu setzen</div>
+
+<section class="drawer" id="drawer">
+  <button class="drawer-handle" id="drawerToggle" aria-expanded="false">
+    <b><span class="bar-count" id="listCount">0</span> Bars</b>
+    <span id="drawerArrow">▲</span>
+  </button>
+  <div class="list" id="list"></div>
+</section>
+
+<section class="detail" id="detail" aria-live="polite"></section>
+
+<section class="add-panel" id="addPanel" aria-live="polite">
+  <div class="add-top">
+    <h2>Bar hinzufügen</h2>
+    <button class="iconbtn" id="addClose" aria-label="Schließen">✕</button>
+  </div>
+
+  <form id="addForm">
+    <div class="field">
+      <label for="afName">Name der Bar</label>
+      <input type="text" id="afName" placeholder="z. B. Heidelberger Bierstube" required>
+    </div>
+    <div class="field">
+      <label for="afNeighborhood">Stadtteil</label>
+      <input type="text" id="afNeighborhood" placeholder="z. B. Altstadt">
+    </div>
+
+    <div class="field">
+      <label for="afGeoQuery">Standort auf der Karte</label>
+      <input type="text" id="afGeoQuery" placeholder="Adresse eingeben… z. B. Hauptstraße 41" autocomplete="off">
+      <div id="afGeoResults"></div>
+      <div class="geo-status-row">
+        <span class="pin-status" id="afPinStatus">nicht gesetzt</span>
+        <button type="button" class="pin-link" id="afPinBtn">📍 Pin manuell setzen</button>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="afLat">Lat</label>
+        <input type="number" id="afLat" step="any" placeholder="z. B. 49.4093">
+      </div>
+      <div class="field">
+        <label for="afLng">Lng</label>
+        <input type="number" id="afLng" step="any" placeholder="z. B. 8.6939">
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="afOpen">Öffnet (Uhr)</label>
+        <input type="number" id="afOpen" min="0" max="23" step="1" placeholder="z. B. 12">
+      </div>
+      <div class="field">
+        <label for="afClose">Schließt (Uhr)</label>
+        <input type="number" id="afClose" min="0" max="23" step="1" placeholder="z. B. 2">
+      </div>
+    </div>
+
+    <div class="field" style="margin-top:20px">
+      <label>Welches Bier?</label>
+      <div id="beerList"></div>
+      <datalist id="volList">
+        <option value="0.3l"><option value="0.33l"><option value="0.4l">
+        <option value="0.5l"><option value="0.75l"><option value="1l">
+      </datalist>
+      <button type="button" class="add-beer-btn" id="addBeerBtn">+ Weiteres Bier hinzufügen</button>
+    </div>
+
+    <button type="submit" class="submit-btn" id="afSubmit">Bar einreichen</button>
+    <div class="form-msg" id="afMsg"></div>
+  </form>
+</section>
+
+<script>
+// ---------------- Live data (Google Sheet) ----------------
+// The site loads bars from a public Google Sheet on every page load (see
+// loadBarsFromSheet() near the bottom). FALLBACK_BARS below is used only
+// if the sheet can't be reached (offline, sharing revoked, etc). This is
+// the Heidelberg-only test build: single city, no happy-hour data, prices
+// in euro.
+let BARS = [];
+
+// ---------------- Fallback data (used if the sheet can't be reached) ----------------
+const FALLBACK_BARS = [
+ {n:"Heidelberger Bierstube", a:"Altstadt", lat:49.4098, lng:8.6939,
+  hours:[16,24],
+  beers:[["Pils vom Fass",4.20,"0.3l"],["Weizen",4.80,"0.5l"],["Radler",3.50,"0.5l"]],
+  tags:["Terrasse","Kartenzahlung","Altstadt-Flair"]},
+ {n:"Alte Brücke Kneipe", a:"Altstadt, an der Alten Brücke", lat:49.4118, lng:8.7057,
+  hours:[15,25],
+  beers:[["Hausbier",2.80,"0.3l"],["Dunkles",3.90,"0.5l"],["Craft IPA",6.50,"0.33l"]],
+  tags:["Blick auf den Neckar","Cash & Karte"]},
+ {n:"Hopfengarten Neuenheim", a:"Neuenheim", lat:49.4193, lng:8.6789,
+  hours:[17,24],
+  beers:[["Pils vom Fass",3.20,"0.3l"],["Helles",4.10,"0.5l"],["Craft Lager",5.50,"0.4l"]],
+  tags:["Biergarten","Hundefreundlich"]},
+ {n:"Studentenkeller Bergheim", a:"Bergheim", lat:49.4013, lng:8.6802,
+  hours:[18,26],
+  beers:[["Pils",2.50,"0.3l"],["Kölsch",2.90,"0.2l"],["Weizen",3.80,"0.5l"]],
+  tags:["Studenten","Beer Pong","Bar"]},
+ {n:"Schlossblick Biergarten", a:"Altstadt, nahe Schloss", lat:49.4106, lng:8.7156,
+  hours:[12,23],
+  beers:[["Helles",4.50,"0.5l"],["Radler",4.00,"0.5l"],["Craft Ale",7.00,"0.33l"]],
+  tags:["Aussicht","Touristisch","Terrasse"]},
+ {n:"Handschuhsheimer Hopfenstube", a:"Handschuhsheim", lat:49.4288, lng:8.6822,
+  hours:[17,25],
+  beers:[["Pils",3.00,"0.3l"],["Dunkel",3.60,"0.5l"],["Weizen",4.20,"0.5l"]],
+  tags:["Vereinslokal","Kegelbahn"]},
+ {n:"Rohrbacher Bierhaus", a:"Rohrbach", lat:49.3868, lng:8.6844,
+  hours:[16,24],
+  beers:[["Export",2.70,"0.3l"],["Landbier",3.30,"0.5l"],["Bockbier",5.80,"0.4l"]],
+  tags:["Familiär","Karte"]},
+ {n:"Bahnstadt Brauhaus", a:"Bahnstadt", lat:49.3986, lng:8.6667,
+  hours:[15,24],
+  beers:[["Craft Pale Ale",5.20,"0.33l"],["Session IPA",4.60,"0.33l"],["Pils",3.40,"0.3l"]],
+  tags:["Craft-Bier","Modern","Studenten"]},
+];
+
+// ---------------- Google Sheet loading ----------------
+// Sheet columns, one row per bar (row 1 = headers, data from row 2).
+// Single-city test build: no "Stadt" column, no happy-hour columns.
+//  A Name            B Stadtteil/Adresse   C Lat
+//  D Lng             E Öffnet (Uhr, 0-23)  F Schließt (Uhr, 0-23 — reale
+//     Uhrzeit; ist sie kleiner als "Öffnet", schließt die Bar nach
+//     Mitternacht, z.B. Öffnet 20, Schließt 2 => 20:00-02:00. Das System
+//     erkennt das automatisch.)
+//  G Biere — "Name:Preis:Volumen | Name2:Preis2:Volumen2" z.B.
+//     "Pils:3.20:0.3l | Weizen:4.80:0.5l" — Preise in Euro (z.B. 3.20).
+//     Dasselbe Bier in mehreren Größen: Preise und Volumen mit "/" trennen,
+//     paarweise nach Position — z.B. "Pils:3.20/6.50:0.3l/1l" erscheint als
+//     eine Zeile "Pils 0.3l/1l" mit beiden Preisen, jeweils nach eigener
+//     Preisstufe eingefärbt.
+//  H Tags — durch Komma getrennt, z.B. "Terrasse, Kartenzahlung"
+const SHEET_ID = "PASTE_YOUR_SHEET_ID_HERE";
+// sheet=Bars pins the read to that exact tab name, so tab order in the
+// spreadsheet (e.g. an "Anleitung" tab placed first) never matters.
+const SHEET_TAB_NAME = "Bars";
+const SHEET_GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(SHEET_TAB_NAME)}`;
+
+function sheetCell(row, i){
+  const cell = row.c && row.c[i];
+  return (cell && cell.v !== null && cell.v !== undefined) ? cell.v : "";
+}
+function parseSheetBeers(raw){
+  if(!raw) return [];
+  return raw.toString().split("|").map(s=>s.trim()).filter(Boolean).map(entry=>{
+    const [name, priceRaw, volRaw] = entry.split(":").map(s=>s ? s.trim() : s);
+    // Support multiple sizes for one beer via slashes on both sides, e.g.
+    // "Pils:3.20/6.50:0.3l/1l" -> one menu line "Pils 0.3l/1l" showing both
+    // prices, each colored by its own tier. Prices/volumes pair by
+    // position; a single value on one side is reused for every size.
+    const priceParts = (priceRaw || "").split("/").map(s=>s.trim());
+    const volParts = (volRaw || "").split("/").map(s=>s.trim());
+    if(priceParts.length === 1 && volParts.length === 1){
+      return [name || "Bier", Number(priceRaw) || 0, volRaw || ""];
+    }
+    const sizes = Math.max(priceParts.length, volParts.length);
+    const prices = [], vols = [];
+    for(let i=0;i<sizes;i++){
+      prices.push(Number(priceParts[i] ?? priceParts[priceParts.length-1]) || 0);
+      vols.push(volParts[i] ?? volParts[volParts.length-1] ?? "");
+    }
+    return [name || "Bier", prices, vols];
+  });
+}
+function parseSheetTags(raw){
+  return raw ? raw.toString().split(",").map(s=>s.trim()).filter(Boolean) : [];
+}
+function parseSheetRow(row){
+  const n = sheetCell(row,0).toString().trim();
+  const latRaw = sheetCell(row,2), lngRaw = sheetCell(row,3);
+  const openRaw = sheetCell(row,4), closeRaw = sheetCell(row,5);
+  if(!n || latRaw==="" || lngRaw==="" || openRaw==="" || closeRaw==="") return null;
+  const lat = Number(latRaw), lng = Number(lngRaw);
+  const openH = Number(openRaw);
+  let closeH = Number(closeRaw);
+  if(!isFinite(lat) || !isFinite(lng) || !isFinite(openH) || !isFinite(closeH)) return null;
+  // Sheet holds real clock hours (0-23). A closing hour at/before the
+  // opening hour means it closes after midnight — roll it past 24 here
+  // so the rest of the app (which works in that "overflow" scale) needs
+  // no further changes. E.g. Öffnet 20, Schließt 2 -> stored as [20,26].
+  if(closeH <= openH) closeH += 24;
+
+  return {
+    n, a: sheetCell(row,1).toString().trim(), lat, lng,
+    hours: [openH, closeH],
+    beers: parseSheetBeers(sheetCell(row,6)),
+    tags: parseSheetTags(sheetCell(row,7)),
+  };
+}
+async function loadBarsFromSheet(){
+  const res = await fetch(SHEET_GVIZ_URL, {cache:"no-store"});
+  if(!res.ok) throw new Error("HTTP "+res.status);
+  const text = await res.text();
+  const jsonText = text.slice(text.indexOf("(")+1, text.lastIndexOf(")"));
+  const data = JSON.parse(jsonText);
+  const rows = (data.table && data.table.rows) || [];
+  return rows.map(parseSheetRow).filter(Boolean);
+}
+
+const HD_CENTER = [49.4093, 8.6939]; // Heidelberg Altstadt / Marktplatz
+const HD_ZOOM_DESK = 14, HD_ZOOM_MOB = 13.5;
+const FOCUS_ZOOM = 17; // zoom used when jumping to a single bar
+let userPos = null;
+
+// ---------------- Helpers ----------------
+const now = new Date();
+const hourNow = now.getHours() + now.getMinutes()/60;
+
+function isOpen(b){
+  const [o,c] = b.hours;
+  const h = hourNow < 6 ? hourNow + 24 : hourNow;
+  return h >= o && h < c;
+}
+function cheapest(b){
+  return Math.min(...b.beers.flatMap(x=>Array.isArray(x[1]) ? x[1] : [x[1]]));
+}
+// Price tiers in euro: under €3.00 = green, €3.00–€5.00 = yellow, over €5.00 = red.
+function priceClass(price){
+  if(price<3) return "cheap";
+  if(price<=5) return "mid";
+  return "pricey";
+}
+// Full price for the detail menu, e.g. "3,50 €".
+function fmtPrice(n){
+  return n.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2}) + " €";
+}
+// Compact price for the small map/list circles, e.g. "3,5" (trailing
+// zeros dropped so it still fits at that size).
+function fmtPriceShort(n){
+  return n.toLocaleString("de-DE",{minimumFractionDigits:0,maximumFractionDigits:2});
+}
+function renderBeerRow(x){
+  const prices = Array.isArray(x[1]) ? x[1] : [x[1]];
+  const vols = Array.isArray(x[2]) ? x[2] : [x[2]];
+  const volText = vols.join("/");
+  const priceHtml = prices.map(p=>`<span class="bp ${priceClass(p)}">${fmtPrice(p)}</span>`).join('<span class="bp-sep">/</span>');
+  return `<div class="beer"><span>${x[0]}<span class="bv">${volText}</span></span><span class="bp-group">${priceHtml}</span></div>`;
+}
+function fmtHours(b){
+  const [o,c]=b.hours;
+  return `${String(o).padStart(2,"0")}:00 – ${String(c%24).padStart(2,"0")}:00`;
+}
+function distKm(lat,lng,from){
+  const R=6371, dLat=(lat-from.lat)*Math.PI/180, dLng=(lng-from.lng)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2 + Math.cos(from.lat*Math.PI/180)*Math.cos(lat*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function refPoint(){
+  if(userPos) return userPos;
+  const c = map.getCenter();
+  return {lat:c.lat, lng:c.lng};
+}
+
+// ---------------- Map ----------------
+const isMobile = matchMedia("(max-width:760px)").matches;
+const map = L.map("map",{zoomControl:false, worldCopyJump:false})
+  .setView(HD_CENTER, isMobile ? HD_ZOOM_MOB : HD_ZOOM_DESK);
+// Keep navigation locked to Heidelberg — this build is a single-city test.
+map.setMaxBounds([[49.335,8.555],[49.475,8.825]]);
+map.options.minZoom = 12;
+L.control.zoom({position:"bottomleft"}).addTo(map);
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{
+  attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:19
+}).addTo(map);
+
+let markers = [];
+
+// ---------------- Render ----------------
+function render(){
+  markers.forEach(m=>map.removeLayer(m)); markers=[];
+  const filtered = BARS;
+  const ref = refPoint();
+
+  filtered.forEach(b=>{
+    const open = isOpen(b);
+    const cls = "cap" + (open ? " "+priceClass(cheapest(b)) : " closed");
+    const icon = L.divIcon({className:"capwrap", iconSize:[46,46], iconAnchor:[23,23],
+      html:`<div class="${cls}" role="button" aria-label="${b.n}, ab ${fmtPrice(cheapest(b))}"><span class="from">ab</span><span class="amt">${fmtPriceShort(cheapest(b))}</span><span class="cur">€</span></div>`});
+    const m = L.marker([b.lat,b.lng],{icon}).addTo(map).on("click",()=>openDetail(b));
+    markers.push(m);
+  });
+
+  // List: bars in current view, nearest first
+  let listBars = filtered.filter(b=>map.getBounds().pad(0.2).contains([b.lat,b.lng]));
+  if(!listBars.length) listBars = filtered; // fallback so list is never empty
+  listBars = [...listBars].sort((a,b)=> distKm(a.lat,a.lng,ref)-distKm(b.lat,b.lng,ref));
+
+  document.getElementById("statCount").textContent = `${filtered.length} Bars`;
+  document.getElementById("listCount").textContent = listBars.length;
+
+  const list = document.getElementById("list");
+  list.innerHTML = listBars.map(b=>{
+    const open=isOpen(b);
+    return `<button class="listrow ${open?"":"closed-row"}" data-i="${BARS.indexOf(b)}">
+      <span class="mini">${fmtPriceShort(cheapest(b))}</span>
+      <span>
+        <div class="rn">${b.n}</div>
+        <div class="rm">${open?"Geöffnet":"Geschlossen"} · ab ${fmtPrice(cheapest(b))}</div>
+      </span>
+      <span class="dist">${distKm(b.lat,b.lng,ref).toFixed(1)} km</span>
+    </button>`;
+  }).join("") || `<div style="padding:24px 12px;font-size:14px;opacity:.7">Keine Bars gefunden.</div>`;
+
+  list.querySelectorAll(".listrow").forEach(r=>r.addEventListener("click",()=>{
+    const b = BARS[+r.dataset.i];
+    map.flyTo([b.lat,b.lng], Math.max(map.getZoom(), FOCUS_ZOOM), {duration:.8});
+    openDetail(b); toggleDrawer(false);
+  }));
+}
+
+// ---------------- Detail ----------------
+const detail = document.getElementById("detail");
+function openDetail(b){
+  const open = isOpen(b);
+  detail.innerHTML = `
+    <div class="d-top">
+      <div>
+        <div class="d-name">${b.n}</div>
+        <div class="d-meta">${b.a} · ${distKm(b.lat,b.lng,refPoint()).toFixed(1)} km</div>
+      </div>
+      <button class="iconbtn" id="dClose" aria-label="Schließen">✕</button>
+    </div>
+    <div class="status ${open?"o":"c"}"><span class="dot"></span>${open?"Jetzt geöffnet":"Jetzt geschlossen"} · Öffnungszeiten heute ${fmtHours(b)}</div>
+    <div class="menu">
+      <h3>Bierpreise</h3>
+      ${b.beers.map(renderBeerRow).join("")}
+    </div>
+    <div class="legend"><span><i class="lc"></i> unter 3,00 €</span><span><i class="lm"></i> 3,00–5,00 €</span><span><i class="lp"></i> über 5,00 €</span></div>
+    <div class="d-tags">${b.tags.map(t=>`<span>${t}</span>`).join("")}</div>
+    <div class="d-note">Preise von der Community aktualisiert · Test-MVP mit Demo-Daten</div>`;
+  addPanel.classList.remove("open");
+  detail.classList.add("open");
+  document.getElementById("dClose").addEventListener("click",()=>detail.classList.remove("open"));
+}
+map.on("click",()=>detail.classList.remove("open"));
+
+// ---------------- Add a bar ----------------
+// Paste the /exec URL from your Apps Script deployment (see google-sheet/Code.gs) here.
+const ADD_BAR_URL = "PASTE_APPS_SCRIPT_EXEC_URL_HERE";
+
+const addPanel = document.getElementById("addPanel");
+const addForm = document.getElementById("addForm");
+const afMsg = document.getElementById("afMsg");
+const afSubmit = document.getElementById("afSubmit");
+const afPinBtn = document.getElementById("afPinBtn");
+const afPinStatus = document.getElementById("afPinStatus");
+const afLat = document.getElementById("afLat");
+const afLng = document.getElementById("afLng");
+const beerList = document.getElementById("beerList");
+const pinHint = document.getElementById("pinHint");
+const afGeoQuery = document.getElementById("afGeoQuery");
+const afGeoResults = document.getElementById("afGeoResults");
+
+let pickingLocation = false;
+let pinMarker = null;
+let geoDebounceTimer = null;
+let geoAbortController = null;
+
+function setPinStatus(lat,lng){
+  afPinStatus.textContent = `${(+lat).toFixed(4)}, ${(+lng).toFixed(4)}`;
+  afPinStatus.classList.remove("err");
+  afPinStatus.classList.add("set");
+}
+function placePin(lat,lng){
+  if(pinMarker) map.removeLayer(pinMarker);
+  pinMarker = L.marker([lat,lng]).addTo(map);
+  afLat.value = (+lat).toFixed(5);
+  afLng.value = (+lng).toFixed(5);
+  setPinStatus(lat,lng);
+}
+function stopPicking(){
+  pickingLocation = false;
+  afPinBtn.classList.remove("picking");
+  afPinBtn.textContent = "📍 Pin manuell setzen";
+  addPanel.classList.remove("picking");
+  pinHint.classList.remove("show");
+}
+afPinBtn.addEventListener("click", ()=>{
+  pickingLocation = !pickingLocation;
+  afPinBtn.classList.toggle("picking", pickingLocation);
+  afPinBtn.textContent = pickingLocation ? "📍 auf die Karte klicken…" : "📍 Pin manuell setzen";
+  // Collapse the panel out of the way so the map underneath is visible
+  // and tappable — otherwise there's nothing to click on mobile.
+  addPanel.classList.toggle("picking", pickingLocation);
+  pinHint.classList.toggle("show", pickingLocation);
+});
+map.on("click", (e)=>{
+  if(!pickingLocation) return;
+  placePin(e.latlng.lat, e.latlng.lng);
+  afGeoResults.innerHTML = "";
+  stopPicking();
+});
+[afLat, afLng].forEach(inp=>inp.addEventListener("input", ()=>{
+  if(afLat.value!=="" && afLng.value!=="") setPinStatus(afLat.value, afLng.value);
+}));
+
+// ---------------- Address search (OpenStreetMap Nominatim) ----------------
+// Public geocoding endpoint, no API key. Usage policy: max ~1 req/s, and
+// results must credit OpenStreetMap contributors (shown under the list).
+// https://nominatim.org/release-docs/latest/api/Search/
+afGeoQuery.addEventListener("input", ()=>{
+  clearTimeout(geoDebounceTimer);
+  afPinStatus.classList.remove("err");
+  const q = afGeoQuery.value.trim();
+  if(q.length < 3){
+    afGeoResults.innerHTML = "";
+    return;
+  }
+  geoDebounceTimer = setTimeout(()=>geocodeAddress(q), 500);
+});
+afGeoQuery.addEventListener("keydown", (e)=>{
+  // Enter would otherwise submit the whole form early — use it to search now instead.
+  if(e.key === "Enter"){
+    e.preventDefault();
+    clearTimeout(geoDebounceTimer);
+    const q = afGeoQuery.value.trim();
+    if(q.length >= 3) geocodeAddress(q);
+  }
+});
+
+async function geocodeAddress(query){
+  const parts = [query, "Heidelberg", "Deutschland"];
+
+  if(geoAbortController) geoAbortController.abort();
+  geoAbortController = new AbortController();
+
+  afGeoQuery.classList.add("loading");
+  afGeoResults.innerHTML = `<div class="geo-results"><div class="geo-result" style="cursor:default;opacity:.5">Suche…</div></div>`;
+
+  try{
+    const url = "https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&countrycodes=de&q=" + encodeURIComponent(parts.join(", "));
+    const res = await fetch(url, { headers: { "Accept-Language": "de" }, signal: geoAbortController.signal });
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    renderGeoResults(await res.json());
+  }catch(err){
+    if(err.name === "AbortError") return; // superseded by a newer keystroke
+    console.warn("Geokodierung fehlgeschlagen:", err);
+    afGeoResults.innerHTML = "";
+    afPinStatus.textContent = "Suche fehlgeschlagen — erneut versuchen oder Pin manuell setzen";
+    afPinStatus.classList.add("err");
+  }finally{
+    afGeoQuery.classList.remove("loading");
+  }
+}
+
+function renderGeoResults(results){
+  if(!results || !results.length){
+    afGeoResults.innerHTML = `<div class="geo-results"><div class="geo-result" style="cursor:default;opacity:.6">Keine Treffer — anderen Text versuchen oder Pin manuell setzen.</div></div>`;
+    return;
+  }
+  afGeoResults.innerHTML = `<div class="geo-results">` +
+    results.map((r,i)=>`<button type="button" class="geo-result" data-i="${i}">${r.display_name}</button>`).join("") +
+    `<div class="geo-attrib">© OpenStreetMap contributors</div></div>`;
+  afGeoResults.querySelectorAll(".geo-result").forEach(btn=>{
+    if(btn.dataset.i === undefined) return;
+    btn.addEventListener("click", ()=>{
+      const r = results[+btn.dataset.i];
+      afGeoQuery.value = r.display_name; // pastes the picked match into the field
+      placePin(+r.lat, +r.lon);
+      map.setView([+r.lat, +r.lon], Math.max(map.getZoom(), FOCUS_ZOOM));
+      afGeoResults.innerHTML = "";
+      autofillFromResult(r);
+    });
+  });
+}
+
+// Nominatim sometimes returns a POI name (if the place is already mapped
+// in OpenStreetMap, e.g. an existing pub) plus a structured address
+// breakdown (neighbourhood, city). Use whatever's there to save retyping
+// — but only into fields the person hasn't already filled in themselves,
+// never overwriting what they typed.
+function autofillFromResult(r){
+  const addr = r.address || {};
+  const afName = document.getElementById("afName");
+  if(!afName.value.trim() && r.name) afName.value = r.name;
+
+  const neighborhood = addr.suburb || addr.neighbourhood || addr.city_district || addr.quarter || "";
+  const afNeighborhood = document.getElementById("afNeighborhood");
+  if(!afNeighborhood.value.trim() && neighborhood) afNeighborhood.value = neighborhood;
+}
+
+function beerBlockHtml(){
+  return `<div class="beer-block">
+    <button type="button" class="beer-remove" aria-label="Bier entfernen">✕</button>
+    <div class="field-row">
+      <div class="field"><label>Name</label><input type="text" class="bfName" placeholder="z. B. Pils vom Fass"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Preis (€)</label><input type="number" class="bfPrice" min="0" step="0.1" placeholder="3.20"></div>
+      <div class="field"><label>Volumen</label><input type="text" class="bfVolume" list="volList" placeholder="0.3l"></div>
+      <div class="field"><label>Art</label>
+        <select class="bfType">
+          <option value="">—</option>
+          <option value="Vom Fass">Vom Fass</option>
+          <option value="Flasche">Flasche</option>
+          <option value="Dose">Dose</option>
+        </select>
+      </div>
+    </div>
+  </div>`;
+}
+function addBeerRow(){
+  const wrap = document.createElement("div");
+  wrap.innerHTML = beerBlockHtml();
+  const block = wrap.firstElementChild;
+  block.querySelector(".beer-remove").addEventListener("click", ()=>{
+    if(beerList.children.length > 1) block.remove();
+  });
+  beerList.appendChild(block);
+}
+document.getElementById("addBeerBtn").addEventListener("click", addBeerRow);
+function resetBeerRows(){
+  beerList.innerHTML = "";
+  addBeerRow();
+}
+
+function showFormMsg(kind, text){
+  afMsg.textContent = text;
+  afMsg.className = "form-msg show " + kind;
+}
+function resetAddForm(){
+  addForm.reset();
+  afPinStatus.textContent = "nicht gesetzt";
+  afPinStatus.classList.remove("set","err");
+  clearTimeout(geoDebounceTimer);
+  if(geoAbortController) geoAbortController.abort();
+  afGeoResults.innerHTML = "";
+  afGeoQuery.classList.remove("loading");
+  if(pinMarker){ map.removeLayer(pinMarker); pinMarker = null; }
+  stopPicking();
+  resetBeerRows();
+  afMsg.className = "form-msg";
+  afMsg.textContent = "";
+  afSubmit.disabled = false;
+  afSubmit.textContent = "Bar einreichen";
+}
+
+function openAddPanel(){
+  detail.classList.remove("open");
+  toggleDrawer(false);
+  resetAddForm();
+  addPanel.classList.add("open");
+}
+function closeAddPanel(){
+  addPanel.classList.remove("open");
+  stopPicking();
+}
+document.getElementById("btnAdd").addEventListener("click", openAddPanel);
+document.getElementById("addClose").addEventListener("click", closeAddPanel);
+
+addForm.addEventListener("submit", async (e)=>{
+  e.preventDefault();
+
+  const name = document.getElementById("afName").value.trim();
+  const neighborhood = document.getElementById("afNeighborhood").value.trim();
+  const openRaw = document.getElementById("afOpen").value;
+  const closeRaw = document.getElementById("afClose").value;
+  const openHour = Number(openRaw), closeHour = Number(closeRaw);
+  const lat = Number(afLat.value), lng = Number(afLng.value);
+
+  const beers = [...beerList.querySelectorAll(".beer-block")].map(block=>({
+    name: block.querySelector(".bfName").value.trim(),
+    price: block.querySelector(".bfPrice").value,
+    volume: block.querySelector(".bfVolume").value.trim(),
+    type: block.querySelector(".bfType").value,
+  })).filter(b=>b.name && b.price!=="");
+
+  if(!name || afLat.value==="" || afLng.value==="" || !isFinite(lat) || !isFinite(lng)
+     || openRaw==="" || closeRaw==="" || !isFinite(openHour) || !isFinite(closeHour)){
+    showFormMsg("err", "Bitte Namen, Standort auf der Karte (Pin) und Öffnungszeiten ausfüllen.");
+    return;
+  }
+  if(!beers.length){
+    showFormMsg("err", "Mindestens ein Bier mit Namen und Preis hinzufügen.");
+    return;
+  }
+
+  afSubmit.disabled = true;
+  afSubmit.textContent = "Wird gesendet…";
+  showFormMsg("", "");
+
+  if(ADD_BAR_URL.indexOf("PASTE_") === 0){
+    showFormMsg("err", "Formular ist noch nicht verbunden (Apps-Script-Adresse fehlt im Code).");
+    afSubmit.disabled = false;
+    afSubmit.textContent = "Bar einreichen";
+    return;
+  }
+
+  try{
+    // Apps Script's response to a cross-origin POST can't reliably be read
+    // back by the browser (a redirect/CORS quirk on Google's end) even
+    // though the request itself reaches doPost() and succeeds — so this
+    // is sent fire-and-forget. Required fields are already checked above;
+    // anything the script alone would reject (e.g. a missing sheet tab)
+    // won't be reported back here.
+    await fetch(ADD_BAR_URL, {
+      method: "POST",
+      mode: "no-cors",
+      body: JSON.stringify({ name, neighborhood, lat, lng, openHour, closeHour, beers }),
+    });
+
+    // Optimistic local update — visible instantly in this tab; everyone
+    // else picks it up from the sheet on their next page load.
+    let closeH = closeHour;
+    if(closeH <= openHour) closeH += 24;
+    BARS.push({
+      n: name, a: neighborhood,
+      lat, lng, hours:[openHour, closeH],
+      beers: beers.map(b=>[b.type ? `${b.name} (${b.type})` : b.name, Number(b.price)||0, b.volume||""]),
+      tags: [],
+    });
+    render();
+
+    showFormMsg("ok", "Hinzugefügt! Erscheint jetzt für dich auf der Karte — für alle anderen beim nächsten Laden der Seite.");
+    afSubmit.disabled = false;
+    afSubmit.textContent = "Bar einreichen";
+    setTimeout(closeAddPanel, 1800);
+  }catch(err){
+    console.warn("Senden fehlgeschlagen:", err);
+    showFormMsg("err", "Konnte nicht gesendet werden (Verbindung oder Server nicht erreichbar). Deine Eingaben bleiben im Formular — versuch es erneut.");
+    afSubmit.disabled = false;
+    afSubmit.textContent = "Bar einreichen";
+  }
+});
+
+// ---------------- Drawer ----------------
+const drawer = document.getElementById("drawer");
+function toggleDrawer(force){
+  const open = force!==undefined ? force : !drawer.classList.contains("open");
+  drawer.classList.toggle("open",open);
+  document.getElementById("drawerToggle").setAttribute("aria-expanded",open);
+  document.getElementById("drawerArrow").textContent = open ? "▼" : "▲";
+}
+document.getElementById("drawerToggle").addEventListener("click",()=>toggleDrawer());
+
+// Re-render on navigation (debounced)
+let t=null;
+map.on("zoomend moveend",()=>{
+  clearTimeout(t);
+  t=setTimeout(render,120);
+});
+
+// ---------------- Geolocation (optional) ----------------
+if(navigator.geolocation){
+  navigator.geolocation.getCurrentPosition(p=>{
+    userPos={lat:p.coords.latitude,lng:p.coords.longitude};
+    render();
+  },()=>{},{timeout:4000});
+}
+
+// ---------------- Boot: load live data, then render ----------------
+async function init(){
+  const badge = document.getElementById("dataBadge");
+  let bars = null;
+  try{
+    bars = await loadBarsFromSheet();
+  }catch(err){
+    console.warn("Konnte Daten nicht aus Google Sheets laden:", err);
+  }
+  if(bars && bars.length){
+    BARS = bars;
+    badge.textContent = "Live-Daten · Google Sheets";
+  } else {
+    BARS = FALLBACK_BARS;
+    badge.textContent = "⚠ Sheet nicht verfügbar · Demo-Daten";
+  }
+  render();
+}
+init();
+</script>
+</body>
+</html>
