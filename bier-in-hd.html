@@ -149,6 +149,15 @@
   .d-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
   .d-tags span{font-size:12px;background:var(--stout-2);border:1px solid var(--line);padding:4px 10px;border-radius:99px}
   .d-note{font-size:11px;opacity:.5;margin-top:14px}
+  .edit-prompt{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    margin-top:14px;padding:10px 12px;background:var(--stout-2);border:1px solid var(--line);
+    border-radius:10px;font-size:12.5px;opacity:.9;
+  }
+  .edit-prompt button{
+    flex:none;background:none;border:1px solid var(--lager);color:var(--lager);
+    font-family:'Archivo';font-size:12px;font-weight:700;padding:7px 12px;border-radius:99px;cursor:pointer;
+  }
   .legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;font-size:11px;opacity:.8}
   .legend span{display:inline-flex;align-items:center;gap:5px}
   .legend i{width:9px;height:9px;border-radius:50%;display:inline-block}
@@ -334,6 +343,25 @@
 
     <button type="submit" class="submit-btn" id="afSubmit">Bar einreichen</button>
     <div class="form-msg" id="afMsg"></div>
+  </form>
+</section>
+
+<section class="add-panel" id="editPricesPanel" aria-live="polite">
+  <div class="add-top">
+    <h2>Preise bearbeiten</h2>
+    <button class="iconbtn" id="editPricesClose" aria-label="Schließen">✕</button>
+  </div>
+  <div class="sub" id="editPricesBarName" style="margin-bottom:6px"></div>
+
+  <form id="editPricesForm">
+    <div class="field" style="margin-top:6px">
+      <label>Biere</label>
+      <div id="editBeerList"></div>
+      <button type="button" class="add-beer-btn" id="editAddBeerBtn">+ Weiteres Bier hinzufügen</button>
+    </div>
+
+    <button type="submit" class="submit-btn" id="epSubmit">Preise aktualisieren</button>
+    <div class="form-msg" id="epMsg"></div>
   </form>
 </section>
 
@@ -594,12 +622,17 @@ function openDetail(b){
       <h3>Bierpreise</h3>
       ${b.beers.map(renderBeerRow).join("")}
     </div>
+    <div class="edit-prompt">
+      <span>Preise sind falsch/veraltet?</span>
+      <button type="button" id="editPricesOpenBtn">Bearbeiten</button>
+    </div>
     <div class="legend"><span><i class="lc"></i> unter 3,00 €</span><span><i class="lm"></i> 3,00–5,00 €</span><span><i class="lp"></i> über 5,00 €</span></div>
     <div class="d-tags">${b.tags.map(t=>`<span>${t}</span>`).join("")}</div>
     <div class="d-note">Preise von der Community aktualisiert · Test-MVP mit Demo-Daten</div>`;
   addPanel.classList.remove("open");
   detail.classList.add("open");
   document.getElementById("dClose").addEventListener("click",()=>detail.classList.remove("open"));
+  document.getElementById("editPricesOpenBtn").addEventListener("click",()=>openEditPrices(b));
 }
 map.on("click",()=>detail.classList.remove("open"));
 
@@ -748,31 +781,40 @@ function autofillFromResult(r){
   if(!afNeighborhood.value.trim() && neighborhood) afNeighborhood.value = neighborhood;
 }
 
-function beerBlockHtml(){
+function escAttr(v){
+  return String(v ?? "").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+function beerBlockHtml(prefill){
+  const name = prefill && prefill.name ? escAttr(prefill.name) : "";
+  const price = prefill && prefill.price !== undefined && prefill.price !== null && prefill.price !== "" ? escAttr(prefill.price) : "";
+  const volume = prefill && prefill.volume ? escAttr(prefill.volume) : "";
   return `<div class="beer-block">
     <button type="button" class="beer-remove" aria-label="Bier entfernen">✕</button>
     <div class="field-row">
-      <div class="field"><label>Name</label><input type="text" class="bfName" placeholder="z. B. Pils vom Fass"></div>
+      <div class="field"><label>Name</label><input type="text" class="bfName" placeholder="z. B. Pils vom Fass" value="${name}"></div>
     </div>
     <div class="field-row">
-      <div class="field"><label>Preis (€)</label><input type="number" class="bfPrice" min="0" step="0.1" placeholder="3.20"></div>
-      <div class="field"><label>Volumen</label><input type="text" class="bfVolume" list="volList" placeholder="0.3l"></div>
+      <div class="field"><label>Preis (€)</label><input type="number" class="bfPrice" min="0" step="0.1" placeholder="3.20" value="${price}"></div>
+      <div class="field"><label>Volumen</label><input type="text" class="bfVolume" list="volList" placeholder="0.3l" value="${volume}"></div>
     </div>
   </div>`;
 }
-function addBeerRow(){
+// listEl: the container to append into (beerList for the add-bar form,
+// editBeerList for the price-edit form) — kept generic so both forms
+// share one row implementation. prefill: optional {name,price,volume}.
+function addBeerRow(listEl, prefill){
   const wrap = document.createElement("div");
-  wrap.innerHTML = beerBlockHtml();
+  wrap.innerHTML = beerBlockHtml(prefill);
   const block = wrap.firstElementChild;
   block.querySelector(".beer-remove").addEventListener("click", ()=>{
-    if(beerList.children.length > 1) block.remove();
+    if(listEl.children.length > 1) block.remove();
   });
-  beerList.appendChild(block);
+  listEl.appendChild(block);
 }
-document.getElementById("addBeerBtn").addEventListener("click", addBeerRow);
+document.getElementById("addBeerBtn").addEventListener("click", ()=>addBeerRow(beerList));
 function resetBeerRows(){
   beerList.innerHTML = "";
-  addBeerRow();
+  addBeerRow(beerList);
 }
 
 function showFormMsg(kind, text){
@@ -880,6 +922,111 @@ addForm.addEventListener("submit", async (e)=>{
     showFormMsg("err", "Konnte nicht gesendet werden (Verbindung oder Server nicht erreichbar). Deine Eingaben bleiben im Formular — versuch es erneut.");
     afSubmit.disabled = false;
     afSubmit.textContent = "Bar einreichen";
+  }
+});
+
+// ---------------- Edit prices ----------------
+// Same ADD_BAR_URL endpoint, distinguished by action:"updatePrices" —
+// the Apps Script matches the bar by name+coordinates and overwrites
+// just its Biere column, leaving everything else untouched.
+const editPricesPanel = document.getElementById("editPricesPanel");
+const editPricesForm = document.getElementById("editPricesForm");
+const editBeerList = document.getElementById("editBeerList");
+const editPricesBarName = document.getElementById("editPricesBarName");
+const epMsg = document.getElementById("epMsg");
+const epSubmit = document.getElementById("epSubmit");
+let currentEditBar = null;
+
+document.getElementById("editAddBeerBtn").addEventListener("click", ()=>addBeerRow(editBeerList));
+
+function showEpMsg(kind, text){
+  epMsg.textContent = text;
+  epMsg.className = "form-msg show " + kind;
+}
+function openEditPrices(bar){
+  currentEditBar = bar;
+  detail.classList.remove("open");
+  toggleDrawer(false);
+  editPricesBarName.textContent = bar.n;
+
+  // Flatten multi-size beers (price/volume stored as arrays) into one
+  // editable row per size — matches how the add-bar form works.
+  const rows = [];
+  bar.beers.forEach(x=>{
+    const prices = Array.isArray(x[1]) ? x[1] : [x[1]];
+    const vols = Array.isArray(x[2]) ? x[2] : [x[2]];
+    prices.forEach((p,i)=>rows.push({name:x[0], price:p, volume: vols[i] ?? vols[0] ?? ""}));
+  });
+  if(!rows.length) rows.push({name:"",price:"",volume:""});
+  editBeerList.innerHTML = "";
+  rows.forEach(r=>addBeerRow(editBeerList, r));
+
+  epMsg.className = "form-msg";
+  epMsg.textContent = "";
+  epSubmit.disabled = false;
+  epSubmit.textContent = "Preise aktualisieren";
+  editPricesPanel.classList.add("open");
+}
+function closeEditPrices(){
+  editPricesPanel.classList.remove("open");
+}
+document.getElementById("editPricesClose").addEventListener("click", closeEditPrices);
+
+editPricesForm.addEventListener("submit", async (e)=>{
+  e.preventDefault();
+  if(!currentEditBar) return;
+
+  const beers = [...editBeerList.querySelectorAll(".beer-block")].map(block=>({
+    name: block.querySelector(".bfName").value.trim(),
+    price: block.querySelector(".bfPrice").value,
+    volume: block.querySelector(".bfVolume").value.trim(),
+  })).filter(b=>b.name && b.price!=="");
+
+  if(!beers.length){
+    showEpMsg("err", "Mindestens ein Bier mit Namen und Preis angeben.");
+    return;
+  }
+
+  epSubmit.disabled = true;
+  epSubmit.textContent = "Wird gesendet…";
+  showEpMsg("", "");
+
+  if(ADD_BAR_URL.indexOf("PASTE_") === 0){
+    showEpMsg("err", "Noch nicht verbunden (Apps-Script-Adresse fehlt im Code).");
+    epSubmit.disabled = false;
+    epSubmit.textContent = "Preise aktualisieren";
+    return;
+  }
+
+  try{
+    // Fire-and-forget, same reasoning as the add-bar submit below.
+    await fetch(ADD_BAR_URL, {
+      method: "POST",
+      mode: "no-cors",
+      body: JSON.stringify({
+        action: "updatePrices",
+        name: currentEditBar.n,
+        lat: currentEditBar.lat,
+        lng: currentEditBar.lng,
+        beers,
+      }),
+    });
+
+    // Optimistic local update — visible instantly in this tab; everyone
+    // else picks it up from the sheet on their next page load.
+    currentEditBar.beers = beers.map(b=>[b.name, Number(b.price)||0, b.volume||""]);
+    render();
+    openDetail(currentEditBar);
+
+    showEpMsg("ok", "Aktualisiert! Neue Preise sind jetzt für dich sichtbar — für alle anderen beim nächsten Laden der Seite.");
+    epSubmit.disabled = false;
+    epSubmit.textContent = "Preise aktualisieren";
+    setTimeout(closeEditPrices, 1800);
+  }catch(err){
+    console.warn("Senden fehlgeschlagen:", err);
+    showEpMsg("err", "Konnte nicht gesendet werden (Verbindung oder Server nicht erreichbar). Versuch es erneut.");
+    epSubmit.disabled = false;
+    epSubmit.textContent = "Preise aktualisieren";
   }
 });
 

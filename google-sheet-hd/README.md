@@ -9,8 +9,11 @@ Cât Costă Berea?. Single city, no happy-hour data, prices in euro.
   database (8 demo rows matching the page's offline fallback); tab
   `Anleitung` documents the columns, the price-tier colors, and includes a
   small conditionally-formatted example.
-- **`Code.gs`** — Apps Script web app that receives "+ Hinzufügen" form
-  submissions and appends a row to the `Bars` tab.
+- **`Code.gs`** — Apps Script web app with two jobs: it receives
+  "+ Hinzufügen" form submissions and appends a row to the `Bars` tab,
+  and it receives "Preise bearbeiten" edits (from a bar's detail card →
+  "Preise sind falsch/veraltet? → Bearbeiten") and overwrites just that
+  row's Biere column, matched by name + coordinates.
 
 ## Live sheet
 
@@ -49,6 +52,14 @@ and the "+ Hinzufügen" form writes new submissions straight back into it.
 Heidelberg, and escapes anything that looks like a spreadsheet formula
 before writing it — malformed or empty submissions come back as
 `{"ok":false,"error":"..."}` instead of a blank row.
+
+Editing prices works the same way: opening a bar's detail card and tapping
+**Bearbeiten** sends `{action:"updatePrices", name, lat, lng, beers}`.
+`Code.gs` finds the matching row by name + coordinates (small tolerance for
+float drift) and overwrites only its Biere column — the row's address,
+hours, and tags are untouched. If a bar's name or pin location was hand-edited
+directly in the sheet after it was added, that match can fail; re-adding the
+bar through the form resyncs it.
 
 ## Price color rule (matches the map markers)
 
