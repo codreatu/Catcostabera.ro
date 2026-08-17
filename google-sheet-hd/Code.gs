@@ -1,18 +1,23 @@
 /**
- * Bier in HD — Apps Script backend for the "Bars" sheet.
+ * Bier in HD — Apps Script backend for the Bars sheet.
  *
  * What this does:
  *  - doPost(e): receives the JSON a visitor submits via the "+ Hinzufügen"
- *    form on bier-in-hd.html and appends one row to the "Bars" tab, in the
- *    same column layout the frontend's parseSheetRow() expects:
+ *    form on bier-in-hd.html and appends one row to the target tab, in
+ *    the same column layout the frontend's parseSheetRow() expects:
  *      A Name | B Stadtteil/Adresse | C Lat | D Lng | E Öffnet (Std)
  *      F Schließt (Std) | G Biere | H Tags
  *  - doGet(e): trivial health check, so you can confirm the deployment is
  *    live by opening the /exec URL in a browser.
  *
+ * This targets the spreadsheet and tab by ID (matching SHEET_ID/SHEET_GID
+ * in bier-in-hd.html), not by name — so it works whether this script is
+ * bound to that sheet or deployed standalone, and survives the tab being
+ * renamed.
+ *
  * Setup:
- *  1. Open the "Bier in HD" Google Sheet (import/open Bier-in-HD-Bars.xlsx
- *     with Google Sheets, or File > Import into an existing sheet).
+ *  1. Open the Google Sheet at:
+ *     https://docs.google.com/spreadsheets/d/1_eEvvCN4kQlhO298_McnxXi1IpFhj4gb42ZAXlCGKRc/edit
  *  2. Extensions > Apps Script, delete the placeholder Code.gs content,
  *     paste this file in, and save.
  *  3. Deploy > New deployment > type "Web app".
@@ -25,15 +30,22 @@
  *     handles the write side).
  */
 
-var SHEET_TAB_NAME = "Bars";
+var SHEET_ID = "1_eEvvCN4kQlhO298_McnxXi1IpFhj4gb42ZAXlCGKRc";
+var SHEET_GID = 1658058362;
+var SHEET_TAB_NAME_FALLBACK = "Bars"; // used only if the gid above can't be found
+
+function getTargetSheet() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  return ss.getSheetById(SHEET_GID) || ss.getSheetByName(SHEET_TAB_NAME_FALLBACK);
+}
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
     var data = JSON.parse(e.postData.contents);
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_TAB_NAME);
-    if (!sheet) throw new Error('Tab "' + SHEET_TAB_NAME + '" nicht gefunden.');
+    var sheet = getTargetSheet();
+    if (!sheet) throw new Error("Ziel-Tab nicht gefunden (gid " + SHEET_GID + ").");
 
     var name = (data.name || "").toString().trim();
     var neighborhood = (data.neighborhood || "").toString().trim();

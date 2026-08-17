@@ -12,26 +12,36 @@ Cât Costă Berea?. Single city, no happy-hour data, prices in euro.
 - **`Code.gs`** — Apps Script web app that receives "+ Hinzufügen" form
   submissions and appends a row to the `Bars` tab.
 
+## Live sheet
+
+`bier-in-hd.html` is already wired to this sheet:
+
+https://docs.google.com/spreadsheets/d/1_eEvvCN4kQlhO298_McnxXi1IpFhj4gb42ZAXlCGKRc/edit#gid=1658058362
+
+The page reads that exact tab by its **gid** (`1658058362`), not by name, so
+renaming the tab or adding others (e.g. an `Anleitung` tab) won't break it.
+`Bier-in-HD-Bars.xlsx` is the template this sheet should match — use it as a
+reference for column layout, or import it wholesale if the sheet is still
+empty (File > Import > Upload, "Insert new sheet(s)").
+
 ## Setup
 
-1. **Create the live sheet.** In Google Drive: Upload `Bier-in-HD-Bars.xlsx`,
-   then open it with Google Sheets (this converts it to a native Sheet) —
-   or create a blank Google Sheet and use File > Import > Upload instead.
-2. **Rename the file** to whatever you like; just keep the tab named
-   exactly `Bars` (the page reads `sheet=Bars` from the gviz endpoint).
-3. **Share it**: Share > General access > "Anyone with the link" → Viewer.
+1. **Match the column layout.** The target tab (gid `1658058362`) needs the
+   8 columns from `Bier-in-HD-Bars.xlsx`'s `Bars` tab, in order: Name,
+   Stadtteil/Adresse, Lat, Lng, Öffnet (Std), Schließt (Std), Biere, Tags —
+   row 1 = headers, data from row 2.
+2. **Share it**: Share > General access > "Anyone with the link" → Viewer.
    This lets the page read it without any login.
-4. **Copy the Sheet ID** from the URL (`.../d/<SHEET_ID>/edit`) into the
-   `SHEET_ID` constant near the top of `bier-in-hd.html`.
-5. **Add the script**: Extensions > Apps Script, replace the default
-   content with `Code.gs`, save.
-6. **Deploy**: Deploy > New deployment > type "Web app" → Execute as **Me**,
+3. **Add the script**: Extensions > Apps Script (from within that sheet, or
+   standalone), replace the default content with `Code.gs`, save. It's
+   already pointed at this sheet ID and gid, so no further edits needed.
+4. **Deploy**: Deploy > New deployment > type "Web app" → Execute as **Me**,
    who has access **Anyone**. Copy the `/exec` URL.
-7. Paste that URL into `ADD_BAR_URL` in `bier-in-hd.html`.
+5. Paste that URL into `ADD_BAR_URL` near the top of `bier-in-hd.html`
+   (`SHEET_ID`/`SHEET_GID` there are already set).
 
-Once both `SHEET_ID` and `ADD_BAR_URL` are filled in, the page reads bars
-live from the sheet, and the "+ Hinzufügen" form writes new submissions
-straight back into it.
+Once `ADD_BAR_URL` is filled in, the page reads bars live from the sheet,
+and the "+ Hinzufügen" form writes new submissions straight back into it.
 
 ## Price color rule (matches the map markers)
 

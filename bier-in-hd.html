@@ -394,11 +394,12 @@ const FALLBACK_BARS = [
 //     eine Zeile "Pils 0.3l/1l" mit beiden Preisen, jeweils nach eigener
 //     Preisstufe eingefärbt.
 //  H Tags — durch Komma getrennt, z.B. "Terrasse, Kartenzahlung"
-const SHEET_ID = "PASTE_YOUR_SHEET_ID_HERE";
-// sheet=Bars pins the read to that exact tab name, so tab order in the
-// spreadsheet (e.g. an "Anleitung" tab placed first) never matters.
-const SHEET_TAB_NAME = "Bars";
-const SHEET_GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(SHEET_TAB_NAME)}`;
+const SHEET_ID = "1_eEvvCN4kQlhO298_McnxXi1IpFhj4gb42ZAXlCGKRc";
+// gid pins the read to that exact tab (its numeric id, from the sheet's
+// own URL — .../edit#gid=1658058362), so renaming the tab or adding
+// other tabs (e.g. an "Anleitung" tab) never breaks this.
+const SHEET_GID = "1658058362";
+const SHEET_GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=1&gid=${SHEET_GID}`;
 
 function sheetCell(row, i){
   const cell = row.c && row.c[i];
